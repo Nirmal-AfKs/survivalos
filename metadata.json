@@ -1,0 +1,6 @@
+{
+  "name": "FlowState — Adaptive Life & Work Auto-Planner",
+  "description": "Neuro-adaptive planning engine that automatically breaks down and interleaves your workload across available free time before deadlines, preventing burnout.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
