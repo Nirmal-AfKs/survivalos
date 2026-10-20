@@ -11,9 +11,11 @@ import {
   X,
   AlertCircle,
   Briefcase,
-  Sparkles
+  Sparkles,
+  Repeat
 } from 'lucide-react';
 import { WorkTask, LifeEvent, ScheduledSlot, WhatToBringItem } from '../types';
+import { formatRecurringDaysShort } from '../utils/scheduler';
 
 interface TasksEventsViewProps {
   tasks: WorkTask[];
@@ -66,10 +68,10 @@ export const TasksEventsView: React.FC<TasksEventsViewProps> = ({
           {onClearSample && (
             <button
               onClick={onClearSample}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif text-stone-900 bg-white hover:bg-stone-50 border border-stone-300 rounded-xl transition-all self-start sm:self-auto cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif text-stone-900 bg-white hover:bg-stone-50 border border-stone-300 rounded-xl transition-all self-start sm:self-auto cursor-pointer shadow-2xs font-medium"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-              <span>start mine (vanish defaults)</span>
+              <span>Clear Defaults & Start Fresh</span>
             </button>
           )}
         </div>
@@ -261,7 +263,14 @@ export const TasksEventsView: React.FC<TasksEventsViewProps> = ({
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="flex items-center gap-2 text-xs text-stone-500">
-                            <span className="font-semibold text-stone-900">{event.date}</span>
+                            {event.recurringDays && event.recurringDays.length > 0 ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-serif bg-stone-100 text-stone-800 border border-stone-200/90 font-medium">
+                                <Repeat className="w-3 h-3 text-stone-600" />
+                                Every {formatRecurringDaysShort(event.recurringDays)}
+                              </span>
+                            ) : (
+                              <span className="font-semibold text-stone-900">{event.date}</span>
+                            )}
                             <span aria-hidden="true">·</span>
                             <span>{event.time}</span>
                             <span aria-hidden="true">·</span>

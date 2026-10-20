@@ -16,10 +16,12 @@ import {
   Sun,
   Smile,
   MousePointer,
-  Undo
+  Undo,
+  Repeat
 } from 'lucide-react';
 import { ScheduledSlot, LifeEvent, WorkTask, ScheduleSettings, DayMode } from '../types';
 import { formatDateKey, addDays, parseDateKey } from '../utils/scheduler';
+import { formatChunkTitle, isEventOnDate, formatRecurringDaysShort } from '../utils/format';
 
 interface ScheduleViewProps {
   todayKey: string;
@@ -155,7 +157,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
 
   // Selected Day Details
   const selectedSlots = slots.filter(s => s.date === selectedDateKey);
-  const selectedEvents = events.filter(e => e.date === selectedDateKey);
+  const selectedEvents = events.filter(e => isEventOnDate(e, selectedDateKey));
   const selectedDateObj = parseDateKey(selectedDateKey);
   const { mode: selectedDayMode, isOverride: selectedIsOverride } = getEffectiveDayMode(selectedDateObj, selectedDateKey);
 
@@ -193,10 +195,10 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
           {onClearSample && (
             <button
               onClick={onClearSample}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif text-stone-900 bg-white hover:bg-stone-50 border border-stone-300 rounded-xl transition-all self-start sm:self-auto cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif text-stone-900 bg-white hover:bg-stone-50 border border-stone-300 rounded-xl transition-all self-start sm:self-auto cursor-pointer shadow-2xs font-medium"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-              <span>start mine (vanish defaults)</span>
+              <span>Clear Defaults & Start Fresh</span>
             </button>
           )}
         </div>
@@ -354,7 +356,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
               const isSelected = cell.dateKey === selectedDateKey;
               const isToday = cell.dateKey === todayKey;
               const daySlots = slots.filter(s => s.date === cell.dateKey);
-              const dayEvents = events.filter(e => e.date === cell.dateKey);
+              const dayEvents = events.filter(e => isEventOnDate(e, cell.dateKey));
 
               const { mode: cellMode, isOverride } = getEffectiveDayMode(cell.dateObj, cell.dateKey);
 
@@ -477,7 +479,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
               const isSelected = item.key === selectedDateKey;
               const isToday = item.key === todayKey;
               const daySlots = slots.filter(s => s.date === item.key);
-              const dayEvents = events.filter(e => e.date === item.key);
+              const dayEvents = events.filter(e => isEventOnDate(e, item.key));
               const hasWork = daySlots.length > 0;
               const allDone = hasWork && daySlots.every(s => s.isCompleted);
               const { mode: dayMode, isOverride } = getEffectiveDayMode(item.dateObj, item.key);
@@ -687,6 +689,12 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                 <div key={event.id} className="bg-white border border-stone-200 rounded-2xl p-5 space-y-3 shadow-2xs">
                   <div>
                     <div className="flex items-center gap-2 text-xs text-stone-500">
+                      {event.recurringDays && event.recurringDays.length > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-serif bg-stone-100 text-stone-800 border border-stone-200/90 font-medium">
+                          <Repeat className="w-2.5 h-2.5 text-stone-600" />
+                          Every {formatRecurringDaysShort(event.recurringDays)}
+                        </span>
+                      )}
                       <span className="font-semibold text-stone-800">{event.time}</span>
                       <span aria-hidden="true">·</span>
                       <span>{event.durationMinutes} min</span>
@@ -788,12 +796,7 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                       </div>
 
                       {(() => {
-                        const cleanSlotTitle = (slot.workTitle || '')
-                          .replace(/\s*—\s*\d+h(\s*\d+m)?|\s*—\s*\d+m/gi, '')
-                          .trim();
-                        const displaySlotTitle = slot.totalChunks > 1
-                          ? `${cleanSlotTitle} (Part ${slot.chunkNumber} of ${slot.totalChunks})`
-                          : cleanSlotTitle;
+                        const displaySlotTitle = formatChunkTitle(slot.workTitle, slot.chunkNumber, slot.totalChunks);
                         return (
                           <div className={`text-base font-semibold text-stone-900 ${slot.isCompleted ? 'line-through text-stone-400' : ''}`}>
                             {displaySlotTitle}
@@ -826,10 +829,10 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
             <div className="pt-2 text-center">
               <button
                 onClick={onClearSample}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 text-xs font-serif text-stone-900 bg-white hover:bg-stone-50 border border-stone-300 rounded-2xl shadow-xs transition-all active:scale-[0.98] cursor-pointer"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 text-xs font-serif text-stone-900 bg-white hover:bg-stone-50 border border-stone-300 rounded-2xl shadow-xs transition-all active:scale-[0.98] cursor-pointer font-medium"
               >
                 <Sparkles className="w-4 h-4 text-amber-600" />
-                <span>✨ Clear Sample Schedule & Start Mine (1-Click)</span>
+                <span>✨ Clear Defaults & Start Fresh (1-Click)</span>
               </button>
             </div>
           )}

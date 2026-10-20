@@ -8,7 +8,7 @@ interface BottomNavProps {
 
 export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab }) => {
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#faf7f2]/95 backdrop-blur-md border-t border-stone-200/80 px-2 pb-[env(safe-area-inset-bottom,8px)]">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FAF8F5]/95 backdrop-blur-md border-t border-stone-200/80 px-2 pb-[env(safe-area-inset-bottom,8px)]">
       <div className="grid grid-cols-4 items-center h-15">
         <button
           onClick={() => setActiveTab('today')}

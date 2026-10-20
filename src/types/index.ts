@@ -18,6 +18,7 @@ export interface LifeEvent {
   notes?: string;
   color: string;
   isDefault?: boolean;
+  recurringDays?: number[]; // [0..6] (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
 }
 
 export interface WorkTask {

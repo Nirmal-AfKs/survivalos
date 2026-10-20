@@ -6,25 +6,143 @@ import { SquadSharePayload, SquadFocusBlock, ScheduledSlot, ScheduleSettings } f
  * Works offline, client-side, zero-login, and webview-resilient.
  */
 
+/**
+ * Fallback to 'https://survivalos-b63.pages.dev' if current domain is not 'survivalos-b63.pages.dev'
+ * Ensures internal dev URLs (*.run.app, localhost) are never leaked in share links.
+ */
+export function getSquadBaseUrl(): string {
+  if (typeof window === 'undefined') {
+    return 'https://survivalos-b63.pages.dev';
+  }
+  const hostname = (window.location.hostname || '').toLowerCase();
+  if (hostname === 'survivalos-b63.pages.dev') {
+    return `${window.location.origin}${window.location.pathname.replace(/\/+$/, '')}`;
+  }
+  return 'https://survivalos-b63.pages.dev';
+}
+
+/**
+ * Encodes squad payload into a clean, compact URL-safe base64 string using btoa.
+ * Avoids raw percent-encoded JSON (%22 strings).
+ */
+function normalizeSquadData(raw: any): SquadSharePayload | null {
+  if (!raw) return null;
+
+  // Case 1: Minimal array schema: [1, curfewTime, dateKey, isFreeRest ? 1 : 0, blocks.map(b => [b.start, b.end]), friendName?, matched?]
+  if (Array.isArray(raw)) {
+    const version = Number(raw[0]) || 1;
+    const curfew = typeof raw[1] === 'string' ? raw[1] : '21:30';
+    const dateKey = typeof raw[2] === 'string' ? raw[2] : '';
+    const isFreeRest = raw[3] === 1;
+    const rawPairs = Array.isArray(raw[4]) ? raw[4] : [];
+    const friendName = typeof raw[5] === 'string' && raw[5] ? raw[5] : undefined;
+    const matched = Boolean(raw[6]);
+
+    const blocks: SquadFocusBlock[] = rawPairs.map((pair: any) => {
+      const start = Array.isArray(pair) ? pair[0] : (pair?.startTime || pair?.start || '16:00');
+      const end = Array.isArray(pair) ? pair[1] : (pair?.endTime || pair?.end || '16:45');
+      const [sh, sm] = String(start).split(':').map(Number);
+      const [eh, em] = String(end).split(':').map(Number);
+      const dur = (!isNaN(sh) && !isNaN(eh)) ? Math.max(15, (eh * 60 + (em || 0)) - (sh * 60 + (sm || 0))) : 45;
+      return {
+        startTime: String(start),
+        endTime: String(end),
+        title: 'Daylight Focus Sprint',
+        category: 'focus',
+        durationMinutes: dur,
+      };
+    });
+
+    return {
+      v: version,
+      curfew,
+      dateKey,
+      dayMode: isFreeRest ? 'free_rest' : 'routine_work',
+      friendName,
+      blocks: blocks.length > 0 ? blocks : [
+        {
+          startTime: '16:00',
+          endTime: '16:45',
+          title: 'Pure Mathematics Review',
+          category: 'study',
+          durationMinutes: 45,
+        }
+      ],
+      matched,
+    };
+  }
+
+  // Case 2: Legacy JSON object format
+  if (typeof raw === 'object') {
+    const rawBlocks = Array.isArray(raw.blocks) ? raw.blocks : [];
+    const blocks: SquadFocusBlock[] = rawBlocks.map((b: any) => {
+      const start = b.startTime || b.start || '16:00';
+      const end = b.endTime || b.end || '16:45';
+      const [sh, sm] = String(start).split(':').map(Number);
+      const [eh, em] = String(end).split(':').map(Number);
+      const dur = b.durationMinutes || ((!isNaN(sh) && !isNaN(eh)) ? Math.max(15, (eh * 60 + (em || 0)) - (sh * 60 + (sm || 0))) : 45);
+      return {
+        startTime: String(start),
+        endTime: String(end),
+        title: (b.title || 'Daylight Focus').trim(),
+        category: b.category || 'focus',
+        durationMinutes: dur,
+      };
+    });
+
+    return {
+      v: raw.v || 1,
+      curfew: raw.curfew || '21:30',
+      dateKey: raw.dateKey || '',
+      dayMode: raw.dayMode || 'routine_work',
+      friendName: raw.friendName,
+      blocks: blocks.length > 0 ? blocks : [
+        {
+          startTime: '16:00',
+          endTime: '16:45',
+          title: 'Pure Mathematics Review',
+          category: 'study',
+          durationMinutes: 45,
+        }
+      ],
+      matched: Boolean(raw.matched),
+      matchedTime: raw.matchedTime,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Compact Schema Encoder:
+ * Minimal array schema cuts base64 string length by over 65%:
+ * [1, curfewTime, dateKey, isFreeRest ? 1 : 0, blocks.map(b => [b.start, b.end])]
+ */
 export function encodeSquadPayload(payload: SquadSharePayload): string {
   try {
-    const compact: SquadSharePayload = {
-      v: payload.v || 1,
-      curfew: payload.curfew || '21:30',
-      dateKey: payload.dateKey,
-      dayMode: payload.dayMode,
-      friendName: payload.friendName,
-      blocks: (payload.blocks || []).map(b => ({
-        startTime: b.startTime,
-        endTime: b.endTime,
-        title: (b.title || 'Daylight Focus').trim(),
-        category: b.category || 'study',
-        durationMinutes: b.durationMinutes || 45,
-      })),
-      matched: payload.matched,
-      matchedTime: payload.matchedTime,
-    };
-    return encodeURIComponent(JSON.stringify(compact));
+    const isFreeRest = payload.dayMode === 'free_rest' ? 1 : 0;
+    const curfewTime = payload.curfew || '21:30';
+    const dateKey = payload.dateKey || '';
+    const blockPairs = (payload.blocks || []).map(b => [b.startTime, b.endTime]);
+
+    const compactArray: any[] = [
+      1,
+      curfewTime,
+      dateKey,
+      isFreeRest,
+      blockPairs,
+    ];
+
+    if (payload.friendName || payload.matched) {
+      compactArray.push(payload.friendName || '', payload.matched ? 1 : 0);
+    }
+
+    const jsonStr = JSON.stringify(compactArray);
+    const b64 = btoa(unescape(encodeURIComponent(jsonStr)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    return b64;
   } catch (err) {
     console.error('Error encoding squad payload', err);
     return '';
@@ -33,13 +151,79 @@ export function encodeSquadPayload(payload: SquadSharePayload): string {
 
 export function buildSquadShareUrl(payload: SquadSharePayload): string {
   const hash = encodeSquadPayload(payload);
-  const base = `${window.location.origin}${window.location.pathname}`;
+  const base = getSquadBaseUrl();
   return `${base}#squad=${hash}`;
+}
+
+export function buildSquadReplyUrl(payload: SquadSharePayload): string {
+  const hash = encodeSquadPayload({
+    ...payload,
+    matched: true,
+  });
+  const base = getSquadBaseUrl();
+  return `${base}#squad=${hash}`;
+}
+
+/**
+ * Parses both the minimal compact array schema and legacy JSON/Base64 payloads gracefully.
+ */
+export function parseSquadPayloadString(rawStr: string): SquadSharePayload | null {
+  if (!rawStr) return null;
+  const trimmed = rawStr.trim();
+
+  // 1. Try URL decode first
+  let decodedStr = trimmed;
+  try {
+    decodedStr = decodeURIComponent(trimmed);
+  } catch {
+    decodedStr = trimmed;
+  }
+
+  // 2. Check if it's already JSON (legacy raw or percent-decoded array/object)
+  if (decodedStr.startsWith('{') || decodedStr.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(decodedStr);
+      const normalized = normalizeSquadData(parsed);
+      if (normalized) return normalized;
+    } catch {
+      // continue
+    }
+  }
+
+  // 3. Try Base64 decoding (compact array format or legacy base64)
+  try {
+    let b64 = decodedStr.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) {
+      b64 += '=';
+    }
+    const binStr = atob(b64);
+    let jsonStr: string;
+    try {
+      jsonStr = decodeURIComponent(escape(binStr));
+    } catch {
+      jsonStr = binStr;
+    }
+    const parsed = JSON.parse(jsonStr);
+    const normalized = normalizeSquadData(parsed);
+    if (normalized) return normalized;
+  } catch {
+    // continue
+  }
+
+  // 4. Final fallback: raw JSON.parse directly
+  try {
+    const parsed = JSON.parse(trimmed);
+    const normalized = normalizeSquadData(parsed);
+    if (normalized) return normalized;
+  } catch {
+    // ignore
+  }
+
+  return null;
 }
 
 export function parseSquadFromUrl(): SquadSharePayload | null {
   try {
-    const fullHref = window.location.href;
     let rawEncoded = '';
 
     // Check hash first: #squad=...
@@ -60,27 +244,9 @@ export function parseSquadFromUrl(): SquadSharePayload | null {
 
     if (!rawEncoded) return null;
 
-    let jsonStr = '';
-    try {
-      jsonStr = decodeURIComponent(rawEncoded);
-    } catch {
-      jsonStr = rawEncoded;
-    }
-
-    let parsed: SquadSharePayload;
-    try {
-      parsed = JSON.parse(jsonStr);
-    } catch {
-      // Attempt base64 decode fallback
-      try {
-        const decodedB64 = atob(jsonStr);
-        parsed = JSON.parse(decodedB64);
-      } catch {
-        return null;
-      }
-    }
-
+    const parsed = parseSquadPayloadString(rawEncoded);
     if (!parsed) return null;
+
     if (!parsed.curfew) {
       parsed.curfew = '21:30';
     }
@@ -88,7 +254,7 @@ export function parseSquadFromUrl(): SquadSharePayload | null {
       parsed.v = 1;
     }
 
-    // Ensure blocks array exists and has at least one valid fallback block if friend had empty blocks
+    // Ensure blocks array exists and has at least one valid fallback block if empty
     if (!parsed.blocks || parsed.blocks.length === 0) {
       parsed.blocks = [
         {

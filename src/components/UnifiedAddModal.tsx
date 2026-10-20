@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { X, Clock, Calendar, Link as LinkIcon, Sparkles, Package, MapPin, Plus } from 'lucide-react';
+import { X, Clock, Calendar, Link as LinkIcon, Sparkles, Package, MapPin, Plus, Repeat } from 'lucide-react';
 import { LifeEvent, ScheduleSettings, WorkTask, WhatToBringItem } from '../types';
-import { formatDateKey, addDays } from '../utils/scheduler';
+import { formatDateKey, addDays, RECURRING_WEEK_DAYS, formatRecurringDaysShort } from '../utils/scheduler';
 
 interface UnifiedAddModalProps {
   isOpen: boolean;
@@ -58,11 +58,12 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
   const [workCategory, setWorkCategory] = useState('Deep Work');
 
   // Event Form State
-  const defaultEventDate = formatDateKey(addDays(new Date(), 3));
+  const defaultEventDate = formatDateKey(new Date());
   const [eventTitle, setEventTitle] = useState('');
   const [eventDate, setEventDate] = useState(defaultEventDate);
   const [eventTime, setEventTime] = useState('11:00');
   const [eventDuration, setEventDuration] = useState(60);
+  const [recurringDays, setRecurringDays] = useState<number[]>([]);
   const [eventLocation, setEventLocation] = useState('');
   const [eventCategory, setEventCategory] = useState<'academic' | 'work' | 'personal' | 'social' | 'health'>('work');
   const [whatToBringList, setWhatToBringList] = useState<string[]>([
@@ -70,6 +71,14 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
     'Water Bottle',
   ]);
   const [newBringItem, setNewBringItem] = useState('');
+
+  const toggleRecurringDay = (dayIndex: number) => {
+    setRecurringDays(prev =>
+      prev.includes(dayIndex)
+        ? prev.filter(d => d !== dayIndex)
+        : [...prev, dayIndex].sort((a, b) => a - b)
+    );
+  };
 
   const calculatedChunks = Math.ceil(estimatedMinutes / settings.focusBlockMinutes);
 
@@ -112,15 +121,21 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
       packed: false,
     }));
 
+    const isRecurring = recurringDays.length > 0;
+    const finalDate = isRecurring
+      ? formatDateKey(new Date())
+      : (eventDate || formatDateKey(new Date()));
+
     onAddEvent({
       title: eventTitle.trim(),
-      date: eventDate,
+      date: finalDate,
       time: eventTime,
       durationMinutes: eventDuration,
       category: eventCategory,
       location: eventLocation.trim() || undefined,
       color: 'stone',
       whatToBring: items,
+      recurringDays: isRecurring ? recurringDays : undefined,
     });
 
     onClose();
@@ -131,7 +146,7 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-xs overflow-y-auto">
       <div 
-        className="bg-[#faf7f2] rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-xl border border-stone-200/80 my-8 space-y-5 animate-in fade-in zoom-in-95 duration-150 text-stone-900"
+        className="bg-[#FAF8F5] rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-xl border border-stone-200/80 my-8 space-y-5 animate-in fade-in zoom-in-95 duration-150 text-stone-900"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -347,14 +362,17 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-serif text-stone-700 mb-1">
-                  date
+                  date {recurringDays.length > 0 && <span className="text-stone-400 font-sans italic text-[11px]">(repeats weekly)</span>}
                 </label>
                 <input
                   type="date"
-                  required
+                  required={recurringDays.length === 0}
+                  disabled={recurringDays.length > 0}
                   value={eventDate}
                   onChange={e => setEventDate(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-white/80 border border-stone-200/90 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-stone-900 tabular-nums text-stone-800"
+                  className={`w-full px-3 py-2 text-xs bg-white/80 border border-stone-200/90 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-stone-900 tabular-nums text-stone-800 ${
+                    recurringDays.length > 0 ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
                 />
               </div>
 
@@ -370,6 +388,57 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
                   className="w-full px-3 py-2 text-xs bg-white/80 border border-stone-200/90 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-stone-900 tabular-nums text-stone-800"
                 />
               </div>
+            </div>
+
+            {/* Repeats Weekly: 7 circular day-pill toggles [M] [T] [W] [T] [F] [S] [S] */}
+            <div className="space-y-2 pt-1 pb-1">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-serif text-stone-700">
+                  repeats weekly (optional)
+                </label>
+                {recurringDays.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setRecurringDays([])}
+                    className="text-[11px] font-serif text-stone-500 hover:text-stone-900 transition-colors cursor-pointer"
+                  >
+                    clear (one-time event)
+                  </button>
+                ) : (
+                  <span className="text-[11px] font-serif text-stone-400 italic">
+                    one-time today if unselected
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between sm:justify-start gap-2">
+                {RECURRING_WEEK_DAYS.map((d, idx) => {
+                  const isActive = recurringDays.includes(d.dayIndex);
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => toggleRecurringDay(d.dayIndex)}
+                      title={d.fullName}
+                      aria-label={d.fullName}
+                      className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-serif font-medium transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-[#1F1E1D] text-[#FAF8F5] shadow-xs ring-2 ring-[#1F1E1D] ring-offset-1'
+                          : 'bg-white/80 text-stone-600 hover:bg-stone-200/70 border border-stone-200/90'
+                      }`}
+                    >
+                      {d.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {recurringDays.length > 0 && (
+                <div className="text-[11px] font-serif text-stone-700 flex items-center gap-1.5 pt-0.5">
+                  <Repeat className="w-3 h-3 text-stone-500 shrink-0" />
+                  <span>repeats every {formatRecurringDaysShort(recurringDays)}</span>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">

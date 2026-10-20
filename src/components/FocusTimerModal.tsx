@@ -19,6 +19,7 @@ import {
 import confetti from 'canvas-confetti';
 import { ScheduledSlot } from '../types';
 import { playGentleBell, startAmbientSound, stopAmbientSound } from '../utils/audio';
+import { formatChunkTitle } from '../utils/format';
 
 interface FocusTimerModalProps {
   slot: ScheduledSlot | null;
@@ -54,13 +55,7 @@ export const FocusTimerModal: React.FC<FocusTimerModalProps> = ({
   const [ambientSound, setAmbientSound] = useState<AmbientType>('none');
   const [mantraIndex, setMantraIndex] = useState(0);
 
-  // Clean slot title removing any redundant " — 1h 30m"
-  const cleanTitle = (slot?.workTitle || '')
-    .replace(/\s*—\s*\d+h(\s*\d+m)?|\s*—\s*\d+m/gi, '')
-    .trim();
-  const displayTitle = (slot?.totalChunks ?? 1) > 1
-    ? `${cleanTitle} (Part ${slot?.chunkNumber || 1} of ${slot?.totalChunks || 1})`
-    : cleanTitle;
+  const displayTitle = formatChunkTitle(slot?.workTitle, slot?.chunkNumber, slot?.totalChunks);
 
   // Track ambient stop function
   const stopAmbientRef = useRef<(() => void) | null>(null);
@@ -180,7 +175,7 @@ export const FocusTimerModal: React.FC<FocusTimerModalProps> = ({
         particleCount: 65,
         spread: 75,
         origin: { y: 0.6 },
-        colors: ['#faf7f2', '#10b981', '#f59e0b', '#6366f1'],
+        colors: ['#FAF8F5', '#10b981', '#f59e0b', '#6366f1'],
       });
     } catch {
       // ignore
@@ -214,7 +209,7 @@ export const FocusTimerModal: React.FC<FocusTimerModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/85 backdrop-blur-lg overflow-y-auto selection:bg-stone-800">
       <div 
-        className="bg-[#181615] border border-stone-800/90 text-[#faf7f2] rounded-3xl max-w-lg w-full p-6 sm:p-9 shadow-2xl relative flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-200 overflow-hidden"
+        className="bg-[#181615] border border-stone-800/90 text-[#FAF8F5] rounded-3xl max-w-lg w-full p-6 sm:p-9 shadow-2xl relative flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-200 overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Ambient organic breathing glow aura */}
@@ -422,7 +417,7 @@ export const FocusTimerModal: React.FC<FocusTimerModalProps> = ({
 
           <button
             onClick={toggleActive}
-            className="px-7 py-3.5 rounded-2xl bg-[#faf7f2] text-stone-950 font-serif font-medium text-sm flex items-center gap-2 hover:bg-white transition-all shadow-md active:scale-95 cursor-pointer min-h-[48px]"
+            className="px-7 py-3.5 rounded-2xl bg-[#FAF8F5] text-stone-950 font-serif font-medium text-sm flex items-center gap-2 hover:bg-white transition-all shadow-md active:scale-95 cursor-pointer min-h-[48px]"
           >
             {isActive ? (
               <>

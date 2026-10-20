@@ -10,11 +10,13 @@ import {
   Coffee,
   Sparkles,
   Moon,
-  Sun
+  Sun,
+  Repeat
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ScheduledSlot, LifeEvent, WorkTask, ScheduleSettings, SquadSharePayload, SquadFocusBlock } from '../types';
 import { formatDateKey, addDays } from '../utils/scheduler';
+import { formatChunkTitle, formatRecurringDaysShort } from '../utils/format';
 import { InboundSquadRadarCard } from './InboundSquadRadarCard';
 
 interface TodayViewProps {
@@ -60,8 +62,16 @@ export const TodayView: React.FC<TodayViewProps> = ({
   onMatchDaylight,
   onDismissInboundSquad,
 }) => {
+  const todayDateObj = new Date();
+  const dayOfWeek = todayDateObj.getDay();
+
   const todaySlots = slots.filter(s => s.date === todayKey);
-  const todayEvents = events.filter(e => e.date === todayKey);
+  const todayEvents = events.filter(e => {
+    if (e.recurringDays && e.recurringDays.length > 0) {
+      return e.recurringDays.includes(dayOfWeek);
+    }
+    return e.date === todayKey;
+  });
 
   const pendingSlots = todaySlots.filter(s => !s.isCompleted);
   const completedSlots = todaySlots.filter(s => s.isCompleted);
@@ -69,16 +79,22 @@ export const TodayView: React.FC<TodayViewProps> = ({
 
   const totalMinutesToday = todaySlots.reduce((acc, s) => acc + s.durationMinutes, 0);
   const completedMinutesToday = completedSlots.reduce((acc, s) => acc + s.durationMinutes, 0);
-
-  const todayDateObj = new Date();
-  const dayOfWeek = todayDateObj.getDay();
   const todayMode = (settings.dateSpecificModes && settings.dateSpecificModes[todayKey]) ||
     (settings.dayModes && settings.dayModes[dayOfWeek]) ||
     (settings.fullyHomeDay.applicableDays.includes(dayOfWeek) ? 'fully_home' : 'routine_work');
 
   const isFullyHome = todayMode === 'fully_home';
   const isRestDay = todayMode === 'free_rest';
-  const isEmptyOrRest = todaySlots.length === 0 || isRestDay;
+  const isEmptyOrRest = (todaySlots.length === 0 && todayEvents.length === 0) || isRestDay;
+
+  // Chronologically sorted timeline items (focus slots + commitments)
+  const timelineItems: Array<
+    | { type: 'slot'; time: string; slot: ScheduledSlot }
+    | { type: 'event'; time: string; event: LifeEvent }
+  > = [
+    ...todaySlots.map(slot => ({ type: 'slot' as const, time: slot.startTime, slot })),
+    ...todayEvents.map(event => ({ type: 'event' as const, time: event.time, event })),
+  ].sort((a, b) => a.time.localeCompare(b.time));
 
   const dayName = todayDateObj.toLocaleDateString('en-US', { weekday: 'long' });
   const monthDay = todayDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -124,10 +140,10 @@ export const TodayView: React.FC<TodayViewProps> = ({
           </div>
           <button
             onClick={onClearSample}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif text-stone-900 bg-white hover:bg-stone-50 border border-stone-300 rounded-xl transition-all self-start sm:self-auto cursor-pointer shadow-2xs"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif text-stone-900 bg-white hover:bg-stone-50 border border-stone-300 rounded-xl transition-all self-start sm:self-auto cursor-pointer shadow-2xs font-medium"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-            <span>start mine (vanish defaults)</span>
+            <span>Clear Defaults & Start Fresh</span>
           </button>
         </div>
       )}
@@ -210,7 +226,9 @@ export const TodayView: React.FC<TodayViewProps> = ({
                   locked cadence & 7-day spread.
                 </div>
                 <div className="text-base sm:text-lg font-serif font-medium text-stone-900">
-                  {pendingSlots.length === 0 ? (
+                  {todaySlots.length === 0 ? (
+                    `${todayEvents.length} commitment${todayEvents.length > 1 ? 's' : ''} scheduled today · rest with an easy mind`
+                  ) : pendingSlots.length === 0 ? (
                     'all scheduled blocks finished · rest with an easy mind'
                   ) : (
                     `${Math.round(totalMinutesToday / 60 * 10) / 10}h planned · ${completedSlots.length} of ${todaySlots.length} blocks completed`
@@ -244,12 +262,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
           {/* Main Focus Anchor: Next Up Focus Block */}
           {nextSlot ? (() => {
             const nextTask = tasks.find(t => t.id === nextSlot.workTaskId);
-            const cleanTitle = (nextSlot.workTitle || '')
-              .replace(/\s*—\s*\d+h(\s*\d+m)?|\s*—\s*\d+m/gi, '')
-              .trim();
-            const displayTitle = nextSlot.totalChunks > 1
-              ? `${cleanTitle} (Part ${nextSlot.chunkNumber} of ${nextSlot.totalChunks})`
-              : cleanTitle;
+            const displayTitle = formatChunkTitle(nextSlot.workTitle, nextSlot.chunkNumber, nextSlot.totalChunks);
             const totalAllocMin = nextTask 
               ? nextTask.estimatedMinutes 
               : (nextSlot.durationMinutes * nextSlot.totalChunks);
@@ -266,7 +279,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
               nextSlot.workTitle.includes('Squad');
 
             return (
-              <div className="bg-[#1c1917] text-[#faf7f2] rounded-3xl p-6 sm:p-8 shadow-sm relative overflow-hidden">
+              <div className="bg-[#1c1917] text-[#FAF8F5] rounded-3xl p-6 sm:p-8 shadow-sm relative overflow-hidden">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
                   <div className="space-y-3 max-w-xl">
                     <div className="flex flex-wrap items-center gap-2 text-xs font-serif text-stone-300">
@@ -307,7 +320,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
                 <div className="flex flex-wrap items-center gap-3 shrink-0">
                   <button
                     onClick={() => onStartFocus(nextSlot)}
-                    className="inline-flex items-center gap-2 px-5 py-3 text-xs font-serif text-stone-900 bg-[#faf7f2] hover:bg-white rounded-xl transition-all shadow-xs active:scale-[0.98] cursor-pointer min-h-[44px]"
+                    className="inline-flex items-center gap-2 px-5 py-3 text-xs font-serif text-stone-900 bg-[#FAF8F5] hover:bg-white rounded-xl transition-all shadow-xs active:scale-[0.98] cursor-pointer min-h-[44px]"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
                     <span>begin focus.</span>
@@ -336,8 +349,14 @@ export const TodayView: React.FC<TodayViewProps> = ({
           })() : (
             <div className="bg-white/80 border border-stone-200/80 rounded-3xl p-8 text-center space-y-3">
               <CheckCircle2 className="w-7 h-7 text-emerald-700 mx-auto" />
-              <h3 className="text-xl font-serif text-stone-900">all daily blocks done.</h3>
-              <p className="text-xs text-stone-600">Rest peacefully. Tomorrow's slots are already arranged.</p>
+              <h3 className="text-xl font-serif text-stone-900">
+                {todayEvents.length > 0 ? 'commitments ahead · peaceful daylight.' : 'all daily blocks done.'}
+              </h3>
+              <p className="text-xs text-stone-600">
+                {todayEvents.length > 0 
+                  ? 'Your day has life commitments below and no study chunks required.' 
+                  : "Rest peacefully. Tomorrow's slots are already arranged."}
+              </p>
               <div className="pt-2">
                 <button
                   onClick={onPeekTomorrow}
@@ -356,12 +375,93 @@ export const TodayView: React.FC<TodayViewProps> = ({
                 today's interleaved flow.
               </h3>
               <span className="text-xs font-serif italic text-stone-500">
-                {todaySlots.length} sessions
+                {timelineItems.length} {timelineItems.length === 1 ? 'item' : 'items'}
+                {todaySlots.length > 0 && todayEvents.length > 0 && ` · ${todaySlots.length} sessions, ${todayEvents.length} commitment${todayEvents.length > 1 ? 's' : ''}`}
               </span>
             </div>
 
             <div className="bg-white/80 border border-stone-200/80 rounded-2xl divide-y divide-stone-100 overflow-hidden shadow-2xs">
-              {todaySlots.map((slot) => {
+              {timelineItems.map((item) => {
+                if (item.type === 'event') {
+                  const event = item.event;
+                  const packedCount = event.whatToBring ? event.whatToBring.filter(i => i.packed).length : 0;
+                  const totalItems = event.whatToBring ? event.whatToBring.length : 0;
+                  return (
+                    <div
+                      key={`timeline-event-${event.id}`}
+                      className="p-4 sm:p-5 bg-amber-50/20 border-l-4 border-l-stone-900 transition-colors flex flex-col gap-3"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2 text-xs font-serif text-stone-500">
+                            <span className="font-semibold text-stone-900 font-mono tabular-nums">
+                              {event.time}
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span>{event.durationMinutes}m</span>
+                            <span aria-hidden="true">·</span>
+                            <span className="italic">{event.category}.</span>
+                            {event.location && (
+                              <>
+                                <span aria-hidden="true">·</span>
+                                <span className="flex items-center gap-1 text-stone-600">
+                                  <MapPin className="w-3 h-3 text-stone-400 inline" />
+                                  {event.location}
+                                </span>
+                              </>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="text-base font-serif font-medium text-stone-900">{event.title}</h4>
+                            {event.recurringDays && event.recurringDays.length > 0 ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-serif bg-stone-100 text-stone-800 border border-stone-200/90 font-medium">
+                                <Repeat className="w-2.5 h-2.5 text-stone-600" />
+                                Every {formatRecurringDaysShort(event.recurringDays)}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-serif bg-stone-100 text-stone-600 border border-stone-200">
+                                commitment
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {totalItems > 0 && (
+                          <div className="text-xs font-serif text-stone-600 bg-white/90 border border-stone-200/80 px-2.5 py-1 rounded-xl shrink-0 self-start sm:self-center">
+                            what to bring: <span className="font-medium text-stone-900">{packedCount}/{totalItems} packed</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* What to bring checklist items directly inside timeline card */}
+                      {event.whatToBring && event.whatToBring.length > 0 && (
+                        <div className="pt-2 border-t border-stone-200/60 flex flex-wrap gap-2">
+                          {event.whatToBring.map(bItem => (
+                            <label
+                              key={bItem.id}
+                              className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-lg text-xs font-serif border transition-colors cursor-pointer ${
+                                bItem.packed 
+                                  ? 'bg-stone-100 text-stone-400 border-stone-200/60 line-through' 
+                                  : 'bg-white text-stone-800 border-stone-200 hover:bg-stone-50'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={bItem.packed}
+                                onChange={() => onToggleWhatToBring(event.id, bItem.id)}
+                                className="w-3.5 h-3.5 text-stone-900 rounded border-stone-300 focus:ring-stone-900"
+                              />
+                              <span>{bItem.text}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                const slot = item.slot;
                 const isMatchedSlot = slot.id === matchedSlotId || 
                   slot.category === 'co-working' || 
                   slot.workTitle.includes('Squad');
@@ -404,12 +504,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
                         </div>
 
                         {(() => {
-                          const cleanSlotTitle = (slot.workTitle || '')
-                            .replace(/\s*—\s*\d+h(\s*\d+m)?|\s*—\s*\d+m/gi, '')
-                            .trim();
-                          const displaySlotTitle = slot.totalChunks > 1
-                            ? `${cleanSlotTitle} (Part ${slot.chunkNumber} of ${slot.totalChunks})`
-                            : cleanSlotTitle;
+                          const displaySlotTitle = formatChunkTitle(slot.workTitle, slot.chunkNumber, slot.totalChunks);
                           return (
                             <div className="text-base font-serif font-medium text-stone-900 flex flex-wrap items-center gap-2">
                               <span className={slot.isCompleted ? 'line-through text-stone-400' : ''}>
@@ -461,10 +556,10 @@ export const TodayView: React.FC<TodayViewProps> = ({
               <div className="pt-2 text-center">
                 <button
                   onClick={onClearSample}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 text-xs font-serif text-stone-900 bg-white hover:bg-stone-50 border border-stone-300 rounded-2xl shadow-xs transition-all active:scale-[0.98] cursor-pointer"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 text-xs font-serif text-stone-900 bg-white hover:bg-stone-50 border border-stone-300 rounded-2xl shadow-xs transition-all active:scale-[0.98] cursor-pointer font-medium"
                 >
                   <Sparkles className="w-4 h-4 text-amber-600" />
-                  <span>✨ Clear Sample Schedule & Start Mine (1-Click)</span>
+                  <span>✨ Clear Defaults & Start Fresh (1-Click)</span>
                 </button>
               </div>
             )}
@@ -489,6 +584,12 @@ export const TodayView: React.FC<TodayViewProps> = ({
               <div key={event.id} className="bg-white/80 border border-stone-200/80 rounded-2xl p-5 space-y-4 shadow-2xs">
                 <div>
                   <div className="flex items-center gap-2 text-xs font-serif text-stone-500">
+                    {event.recurringDays && event.recurringDays.length > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-serif bg-stone-100 text-stone-800 border border-stone-200/90 font-medium">
+                        <Repeat className="w-2.5 h-2.5 text-stone-600" />
+                        Every {formatRecurringDaysShort(event.recurringDays)}
+                      </span>
+                    )}
                     <span className="font-medium text-stone-900">{event.time}</span>
                     <span aria-hidden="true">·</span>
                     <span>{event.durationMinutes} min</span>

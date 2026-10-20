@@ -1,5 +1,6 @@
 import { WorkTask, LifeEvent, ScheduledSlot, ScheduleSettings } from '../types';
 import { formatDateKey, recalculateSchedule, addDays } from './scheduler';
+import { cleanTaskTitle } from './format';
 
 const STORAGE_KEYS = {
   TASKS: 'flowstate_tasks_v1',
@@ -264,7 +265,7 @@ export function getInitialSlots(todayKey: string): ScheduledSlot[] {
     [
       {
         taskId: 'default-task-math-review',
-        title: 'Pure Mathematics Review (Part 1 of 2)',
+        title: 'Pure Mathematics Review',
         category: 'Study',
         color: 'indigo',
         startTime: '16:00',
@@ -300,7 +301,7 @@ export function getInitialSlots(todayKey: string): ScheduledSlot[] {
     [
       {
         taskId: 'default-task-math-review',
-        title: 'Pure Mathematics Review (Part 2 of 2)',
+        title: 'Pure Mathematics Review',
         category: 'Study',
         color: 'indigo',
         startTime: '16:00',
@@ -336,7 +337,7 @@ export function getInitialSlots(todayKey: string): ScheduledSlot[] {
     [
       {
         taskId: 'default-task-physics-set',
-        title: 'Physics Mechanics Problem Set (Part 2 of 2)',
+        title: 'Physics Mechanics Problem Set',
         category: 'Study',
         color: 'emerald',
         startTime: '16:00',
@@ -372,7 +373,7 @@ export function getInitialSlots(todayKey: string): ScheduledSlot[] {
     [
       {
         taskId: 'default-task-lit-review',
-        title: 'Literature & Critical Analysis (Part 2 of 2)',
+        title: 'Literature & Critical Analysis',
         category: 'Writing',
         color: 'sky',
         startTime: '16:00',
@@ -383,7 +384,7 @@ export function getInitialSlots(todayKey: string): ScheduledSlot[] {
       },
       {
         taskId: 'default-task-systems-arch',
-        title: 'Systems Architecture Design (Part 2 of 2)',
+        title: 'Systems Architecture Design',
         category: 'Code',
         color: 'purple',
         startTime: '17:00',
@@ -444,7 +445,7 @@ export function getInitialSlots(todayKey: string): ScheduledSlot[] {
     [
       {
         taskId: 'default-task-creative-research',
-        title: 'Deep Creative Research (Part 2 of 2)',
+        title: 'Deep Creative Research',
         category: 'Design',
         color: 'rose',
         startTime: '10:00',
@@ -455,7 +456,7 @@ export function getInitialSlots(todayKey: string): ScheduledSlot[] {
       },
       {
         taskId: 'default-task-logic-proofs',
-        title: 'Discrete Logic & Proof Synthesis (Part 2 of 2)',
+        title: 'Discrete Logic & Proof Synthesis',
         category: 'Study',
         color: 'violet',
         startTime: '11:00',
@@ -526,7 +527,7 @@ export function getInitialSlots(todayKey: string): ScheduledSlot[] {
       allSlots.push({
         id: `slot-default-${dateKey}-${slotIndex}`,
         workTaskId: item.taskId,
-        workTitle: item.title,
+        workTitle: cleanTaskTitle(item.title),
         category: item.category,
         color: item.color,
         date: dateKey,
@@ -645,7 +646,10 @@ export function loadSlots(tasks: WorkTask[], events: LifeEvent[], settings: Sche
             return fullHorizonSlots;
           }
         }
-        return parsed;
+        return parsed.map((s: ScheduledSlot) => ({
+          ...s,
+          workTitle: cleanTaskTitle(s.workTitle)
+        }));
       }
     }
   } catch (e) {

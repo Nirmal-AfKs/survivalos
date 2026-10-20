@@ -8,6 +8,7 @@ import { SettingsView } from './components/SettingsView';
 import { UnifiedAddModal } from './components/UnifiedAddModal';
 import { SquadRadarModal } from './components/SquadRadarModal';
 import { FocusTimerModal } from './components/FocusTimerModal';
+const LegalLicenseModal = React.lazy(() => import('./components/LegalLicenseModal').then(m => ({ default: m.LegalLicenseModal })));
 import { 
   WorkTask, 
   LifeEvent, 
@@ -33,6 +34,7 @@ import {
 } from './utils/storage';
 import { formatDateKey, recalculateSchedule, addDays } from './utils/scheduler';
 import { parseSquadFromUrl, encodeSquadPayload } from './utils/squad';
+import { cleanTaskTitle } from './utils/format';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'today' | 'schedule' | 'tasks' | 'settings'>('today');
@@ -51,11 +53,12 @@ export default function App() {
   // Modals state
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isSquadRadarOpen, setIsSquadRadarOpen] = useState(false);
+  const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
   const [activeFocusSlot, setActiveFocusSlot] = useState<ScheduledSlot | null>(null);
   const todayKey = formatDateKey(new Date());
 
   useEffect(() => {
-    document.title = 'cadence. — sanctuary workload scheduler';
+    document.title = 'cadence. — daylight focus & squad rhythm';
 
     // Check for #squad= on mount or on hash changes
     const handleCheckHash = () => {
@@ -160,9 +163,7 @@ export default function App() {
   const handleMatchDaylight = (friendBlock: SquadFocusBlock) => {
     const { userTasks, userEvents, userSlots } = vanishDefaults();
 
-    const cleanFriendTitle = (friendBlock.title || 'Daylight Overlap')
-      .replace(/\s*—\s*\d+h(\s*\d+m)?|\s*—\s*\d+m/gi, '')
-      .trim();
+    const cleanFriendTitle = cleanTaskTitle(friendBlock.title || 'Daylight Overlap');
     const matchedTitle = `⚡ Squad Co-Focus Sprint (${cleanFriendTitle})`;
     const sprintDuration = friendBlock.durationMinutes || 45;
 
@@ -414,7 +415,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#faf7f2] text-stone-900 flex flex-col font-sans selection:bg-stone-900 selection:text-[#faf7f2]">
+    <div className="min-h-screen bg-[#FAF8F5] text-stone-900 flex flex-col font-sans selection:bg-stone-900 selection:text-[#FAF8F5]">
       {/* Top Navigation Bar with Single Clean + Add Action & Squad Radar */}
       <TopBar
         activeTab={activeTab}
@@ -487,9 +488,23 @@ export default function App() {
           <SettingsView
             settings={settings}
             onSaveSettings={handleSaveSettings}
+            onOpenLegal={() => setIsLegalModalOpen(true)}
           />
         )}
       </main>
+
+      {/* Sanctuary Footer with Legal & MIT License */}
+      <footer className="max-w-4xl mx-auto px-4 py-8 text-center text-xs font-serif text-stone-400 flex flex-wrap items-center justify-center gap-2 sm:gap-3 border-t border-stone-200/50 mt-12 mb-16 sm:mb-6">
+        <span>cadence. sanctuary — zero spam, gentle human coordination</span>
+        <span aria-hidden="true">·</span>
+        <button
+          type="button"
+          onClick={() => setIsLegalModalOpen(true)}
+          className="inline-flex items-center gap-1 text-stone-500 hover:text-stone-800 underline decoration-stone-300 underline-offset-2 transition-colors cursor-pointer not-italic font-sans"
+        >
+          ⚖️ Legal & MIT License
+        </button>
+      </footer>
 
       {/* Mobile Ergonomic Bottom Bar */}
       <BottomNav
@@ -519,7 +534,18 @@ export default function App() {
           events={events}
           settings={settings}
           todayKey={todayKey}
+          onOpenLegal={() => setIsLegalModalOpen(true)}
         />
+      )}
+
+      {/* Legal & MIT License Modal */}
+      {isLegalModalOpen && (
+        <React.Suspense fallback={null}>
+          <LegalLicenseModal
+            isOpen={isLegalModalOpen}
+            onClose={() => setIsLegalModalOpen(false)}
+          />
+        </React.Suspense>
       )}
 
       {/* Serene Focus Timer */}

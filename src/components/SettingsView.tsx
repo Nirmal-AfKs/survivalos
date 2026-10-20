@@ -18,6 +18,7 @@ import { ScheduleSettings, DayMode } from '../types';
 interface SettingsViewProps {
   settings: ScheduleSettings;
   onSaveSettings: (settings: ScheduleSettings) => void;
+  onOpenLegal?: () => void;
 }
 
 const DAYS_META: { id: number; name: string; short: string }[] = [
@@ -33,6 +34,7 @@ const DAYS_META: { id: number; name: string; short: string }[] = [
 export const SettingsView: React.FC<SettingsViewProps> = ({
   settings,
   onSaveSettings,
+  onOpenLegal,
 }) => {
   const [formData, setFormData] = useState<ScheduleSettings>(settings);
   const [savedFeedback, setSavedFeedback] = useState(false);
@@ -59,36 +61,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setFormData({
       ...formData,
       dayModes: updatedModes,
-      averageDay: { ...formData.averageDay, applicableDays: avgDays },
-      fullyHomeDay: { ...formData.fullyHomeDay, applicableDays: homeDays },
-    });
-  };
-
-  const applyPreset = (preset: 'standard' | 'student' | 'freelancer') => {
-    let newModes: Record<number, DayMode>;
-    if (preset === 'standard') {
-      newModes = {
-        1: 'routine_work', 2: 'routine_work', 3: 'routine_work', 4: 'routine_work', 5: 'routine_work',
-        6: 'fully_home', 0: 'fully_home',
-      };
-    } else if (preset === 'student') {
-      newModes = {
-        1: 'routine_work', 2: 'routine_work', 3: 'routine_work', 4: 'routine_work',
-        5: 'fully_home', 6: 'fully_home', 0: 'free_rest',
-      };
-    } else {
-      newModes = {
-        1: 'fully_home', 2: 'fully_home', 3: 'fully_home', 4: 'fully_home', 5: 'fully_home',
-        6: 'free_rest', 0: 'free_rest',
-      };
-    }
-
-    const avgDays = Object.entries(newModes).filter(([_, v]) => v === 'routine_work').map(([k]) => Number(k));
-    const homeDays = Object.entries(newModes).filter(([_, v]) => v === 'fully_home').map(([k]) => Number(k));
-
-    setFormData({
-      ...formData,
-      dayModes: newModes,
       averageDay: { ...formData.averageDay, applicableDays: avgDays },
       fullyHomeDay: { ...formData.fullyHomeDay, applicableDays: homeDays },
     });
@@ -125,31 +97,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </p>
             </div>
 
-            {/* Presets */}
-            <div className="flex items-center gap-1.5 self-start sm:self-auto">
-              <span className="text-[11px] text-stone-400 mr-1">Presets:</span>
-              <button
-                type="button"
-                onClick={() => applyPreset('standard')}
-                className="px-2.5 py-1 text-xs bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg transition-colors cursor-pointer"
-              >
-                Standard
-              </button>
-              <button
-                type="button"
-                onClick={() => applyPreset('student')}
-                className="px-2.5 py-1 text-xs bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg transition-colors cursor-pointer"
-              >
-                Student
-              </button>
-              <button
-                type="button"
-                onClick={() => applyPreset('freelancer')}
-                className="px-2.5 py-1 text-xs bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg transition-colors cursor-pointer"
-              >
-                Freelancer
-              </button>
-            </div>
           </div>
 
           {/* 7 Days Grid Cards */}
@@ -499,6 +446,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               />
               <div className="w-11 h-6 bg-stone-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-stone-900"></div>
             </label>
+          </div>
+        </div>
+
+        {/* SECTION 4: STATUTORY & LEGAL SANCTUARY */}
+        <div className="bg-white/80 border border-stone-200/80 rounded-3xl p-6 sm:p-7 shadow-2xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-stone-700" />
+                <h3 className="text-base font-serif font-medium text-stone-900">
+                  4. open source & zero-leak sanctuary terms
+                </h3>
+              </div>
+              <p className="text-xs font-serif italic text-stone-500">
+                100% offline client storage. no tracking, no servers, zero data collection.
+              </p>
+            </div>
+            {onOpenLegal && (
+              <button
+                type="button"
+                onClick={onOpenLegal}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-serif font-medium text-stone-800 bg-stone-100 hover:bg-stone-200/80 border border-stone-200/90 rounded-xl transition-all cursor-pointer shadow-2xs min-h-[38px] self-start sm:self-auto"
+              >
+                <span>⚖️ Legal & MIT License</span>
+              </button>
+            )}
           </div>
         </div>
 

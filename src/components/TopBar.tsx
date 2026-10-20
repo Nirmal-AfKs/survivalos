@@ -15,7 +15,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenSquadRadar,
 }) => {
   return (
-    <header className="sticky top-0 z-30 w-full bg-[#faf7f2]/90 backdrop-blur-md border-b border-stone-200/80 transition-colors">
+    <header className="sticky top-0 z-30 w-full bg-[#FAF8F5]/90 backdrop-blur-md border-b border-stone-200/80 transition-colors">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-8">
         {/* Zone 1: Brand wordmark in warm lowercase serif */}
         <div className="flex items-center gap-2.5 shrink-0">
@@ -25,9 +25,6 @@ export const TopBar: React.FC<TopBarProps> = ({
           >
             <span className="text-xl sm:text-2xl font-serif font-normal tracking-tight text-stone-900 group-hover:text-stone-700 transition-colors">
               cadence.
-            </span>
-            <span className="text-[11px] font-serif italic text-stone-400 hidden sm:inline">
-              sanctuary
             </span>
           </button>
         </div>

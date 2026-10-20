@@ -1,4 +1,6 @@
 import { WorkTask, LifeEvent, ScheduledSlot, ScheduleSettings } from '../types';
+import { cleanTaskTitle, formatChunkTitle, isEventOnDate, formatRecurringDaysShort, RECURRING_WEEK_DAYS } from './format';
+export { cleanTaskTitle, formatChunkTitle, isEventOnDate, formatRecurringDaysShort, RECURRING_WEEK_DAYS };
 
 export function formatDateKey(date: Date): string {
   const year = date.getFullYear();
@@ -216,8 +218,8 @@ export function recalculateSchedule(
     const currentDay = addDays(startDate, dayOffset);
     const dayKey = formatDateKey(currentDay);
     
-    // Find events on this day
-    const dayEvents = events.filter(e => e.date === dayKey);
+    // Find events on this day (including recurring weekly events)
+    const dayEvents = events.filter(e => isEventOnDate(e, currentDay));
     const templates = getDailySlotTemplates(currentDay, settings, dayEvents);
 
     for (const tpl of templates) {
@@ -267,7 +269,7 @@ export function recalculateSchedule(
       newSlots.push({
         id: `slot-${dayKey}-${tpl.startTime}-${selectedTask.task.id}-${Math.random().toString(36).slice(2, 6)}`,
         workTaskId: selectedTask.task.id,
-        workTitle: selectedTask.task.title,
+        workTitle: cleanTaskTitle(selectedTask.task.title),
         category: selectedTask.task.category,
         color: selectedTask.task.color,
         date: dayKey,

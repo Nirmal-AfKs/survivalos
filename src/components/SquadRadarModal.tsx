@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Share2, Copy, Check, MessageSquare, Send, Users, Sparkles, Sun, Clock } from 'lucide-react';
+import { X, Share2, Copy, Check, MessageSquare, Send, Users, Sparkles, Sun, Clock, QrCode } from 'lucide-react';
 import { ScheduledSlot, ScheduleSettings, LifeEvent, SquadSharePayload } from '../types';
 import { formatDateKey } from '../utils/scheduler';
 import { buildSquadShareUrl, copyToClipboardSafe } from '../utils/squad';
@@ -11,6 +11,7 @@ interface SquadRadarModalProps {
   events: LifeEvent[];
   settings: ScheduleSettings;
   todayKey: string;
+  onOpenLegal?: () => void;
 }
 
 export const SquadRadarModal: React.FC<SquadRadarModalProps> = ({
@@ -20,15 +21,16 @@ export const SquadRadarModal: React.FC<SquadRadarModalProps> = ({
   events,
   settings,
   todayKey,
+  onOpenLegal,
 }) => {
   const [copied, setCopied] = useState(false);
+  const [showQr, setShowQr] = useState(false);
+  const [qrSvg, setQrSvg] = useState<string>('');
+  const [qrLoading, setQrLoading] = useState(false);
 
   if (!isOpen) return null;
 
   const todayDateObj = new Date();
-  const dayName = todayDateObj.toLocaleDateString('en-US', { weekday: 'long' });
-  const monthDay = todayDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
   const todaySlots = slots.filter(s => s.date === todayKey);
   const todayEvents = events.filter(e => e.date === todayKey);
 
@@ -67,42 +69,9 @@ export const SquadRadarModal: React.FC<SquadRadarModalProps> = ({
 
   const squadShareUrl = buildSquadShareUrl(payload);
 
-  // Build warm natural availability text for the squad
-  const generateShareText = () => {
-    let text = `🌿 My cadence for ${dayName}, ${monthDay}:\n\n`;
-
-    if (todayMode === 'free_rest') {
-      text += `🏖️ Today is a full free rest day! Free anytime to hang out or chat.\n`;
-    } else {
-      if (todaySlots.length > 0) {
-        text += `🎯 Focused blocks:\n`;
-        todaySlots.forEach(s => {
-          text += `  • ${s.startTime}–${s.endTime} (${s.workTitle})\n`;
-        });
-      } else {
-        text += `✨ Open day: Zero scheduled work blocks.\n`;
-      }
-
-      if (todayEvents.length > 0) {
-        text += `\n📍 Commitments:\n`;
-        todayEvents.forEach(e => {
-          text += `  • ${e.time}: ${e.title} (${e.durationMinutes}m)\n`;
-        });
-      }
-
-      if (todayMode === 'fully_home') {
-        text += `\n☕ Best free overlap: Lunch 12:30–13:30 or evening after 17:30.\n`;
-      } else {
-        text += `\n☕ Best free overlap: Before 18:00 or late evening after 21:30.\n`;
-      }
-    }
-
-    text += `\n⚡ 1-Tap Match daylight & co-work with me on cadence:\n${squadShareUrl}\n`;
-    text += `\n(Shared from cadence. sanctuary • curfew locked at ${userCurfew || '21:30'})`;
-    return text;
-  };
-
-  const shareText = generateShareText();
+  // Punchy and natural share text
+  const curfew = userCurfew || '21:30';
+  const shareText = `⚡ Matching daylight focus today (wrapping by ${curfew}). Tap to sync focus sprints & breaks: ${squadShareUrl} (No login, 100% free)`;
   const encodedText = encodeURIComponent(shareText);
 
   const handleCopy = async () => {
@@ -110,6 +79,33 @@ export const SquadRadarModal: React.FC<SquadRadarModalProps> = ({
     if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
+    }
+  };
+
+  const handleToggleQr = async () => {
+    if (showQr) {
+      setShowQr(false);
+      return;
+    }
+    setShowQr(true);
+    if (!qrSvg) {
+      setQrLoading(true);
+      try {
+        const QRCode = (await import('qrcode')).default;
+        const svg = await QRCode.toString(squadShareUrl, {
+          type: 'svg',
+          margin: 1,
+          color: {
+            dark: '#1F1E1D',
+            light: '#FAF8F5',
+          },
+        });
+        setQrSvg(svg);
+      } catch (err) {
+        console.error('Failed to generate QR code', err);
+      } finally {
+        setQrLoading(false);
+      }
     }
   };
 
@@ -132,7 +128,7 @@ export const SquadRadarModal: React.FC<SquadRadarModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-xs overflow-y-auto">
       <div 
-        className="bg-[#faf7f2] rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-xl border border-stone-200/80 my-8 space-y-6 animate-in fade-in zoom-in-95 duration-150 text-stone-900"
+        className="bg-[#FAF8F5] rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-xl border border-stone-200/80 my-8 space-y-5 animate-in fade-in zoom-in-95 duration-150 text-stone-900"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -157,8 +153,13 @@ export const SquadRadarModal: React.FC<SquadRadarModalProps> = ({
           Share your daily flow, focus windows, and open coffee slots with friends, co-workers, or study partners in one tap so they know when you are in flow and when you are free.
         </p>
 
-        {/* Preview Card */}
-        <div className="bg-white/80 border border-stone-200/70 rounded-2xl p-4 space-y-3 font-mono text-xs text-stone-700 whitespace-pre-line leading-relaxed shadow-2xs">
+        {/* 🔒 Zero-Leak Privacy Banner */}
+        <div className="bg-stone-100/80 border border-stone-200/90 rounded-2xl px-3.5 py-2.5 flex items-center gap-2 text-xs font-serif text-stone-800 shadow-2xs">
+          <span>🔒 Zero-Leak: Only your open daylight hours are shared. Your tasks and private notes remain strictly on your device.</span>
+        </div>
+
+        {/* Preview Card with break-all whitespace-normal overflow-hidden max-w-full font-mono text-xs */}
+        <div className="bg-white/80 border border-stone-200/70 rounded-2xl p-4 space-y-3 break-all whitespace-normal overflow-hidden max-w-full font-mono text-xs text-stone-700 leading-relaxed shadow-2xs">
           {shareText}
         </div>
 
@@ -168,25 +169,73 @@ export const SquadRadarModal: React.FC<SquadRadarModalProps> = ({
             1-Tap Instant Sharing Loops
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             {/* WhatsApp */}
             <button
               onClick={shareWhatsApp}
-              className="flex items-center justify-center gap-2 px-4 py-3 bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 text-[#128C7E] font-medium text-xs rounded-xl transition-all cursor-pointer active:scale-[0.98] min-h-[44px]"
+              className="flex items-center justify-center gap-2 px-3 py-3 bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 text-[#128C7E] font-medium text-xs rounded-xl transition-all cursor-pointer active:scale-[0.98] min-h-[44px]"
             >
-              <MessageSquare className="w-4 h-4 text-[#25D366]" />
+              <MessageSquare className="w-4 h-4 text-[#25D366] shrink-0" />
               <span>Share to WhatsApp</span>
             </button>
 
             {/* Telegram */}
             <button
               onClick={shareTelegram}
-              className="flex items-center justify-center gap-2 px-4 py-3 bg-[#0088cc]/10 hover:bg-[#0088cc]/20 border border-[#0088cc]/30 text-[#0088cc] font-medium text-xs rounded-xl transition-all cursor-pointer active:scale-[0.98] min-h-[44px]"
+              className="flex items-center justify-center gap-2 px-3 py-3 bg-[#0088cc]/10 hover:bg-[#0088cc]/20 border border-[#0088cc]/30 text-[#0088cc] font-medium text-xs rounded-xl transition-all cursor-pointer active:scale-[0.98] min-h-[44px]"
             >
-              <Send className="w-4 h-4 text-[#0088cc]" />
+              <Send className="w-4 h-4 text-[#0088cc] shrink-0" />
               <span>Share to Telegram</span>
             </button>
+
+            {/* Table QR */}
+            <button
+              onClick={handleToggleQr}
+              className={`flex items-center justify-center gap-2 px-3 py-3 font-medium text-xs rounded-xl transition-all cursor-pointer active:scale-[0.98] min-h-[44px] ${
+                showQr
+                  ? 'bg-[#1F1E1D] text-[#FAF8F5] border border-[#1F1E1D] shadow-xs'
+                  : 'bg-stone-100 hover:bg-stone-200/80 border border-stone-200/90 text-stone-800'
+              }`}
+            >
+              <span>📷 Table QR</span>
+            </button>
           </div>
+
+          {/* Inline Table QR Code Display */}
+          {showQr && (
+            <div className="p-5 bg-white border border-stone-200/90 rounded-2xl shadow-xs text-center space-y-3 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between pb-1 border-b border-stone-100">
+                <div className="text-xs font-serif font-medium text-stone-800 flex items-center gap-1.5">
+                  <QrCode className="w-3.5 h-3.5 text-stone-600" />
+                  <span>table camera scan · sync daylight</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowQr(false)}
+                  className="p-1 text-stone-400 hover:text-stone-700 rounded-lg hover:bg-stone-100 transition-colors cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="flex justify-center items-center py-1">
+                {qrLoading ? (
+                  <div className="w-48 h-48 flex items-center justify-center text-xs font-serif text-stone-400">
+                    rendering qr code...
+                  </div>
+                ) : qrSvg ? (
+                  <div
+                    className="w-48 h-48 max-w-full rounded-xl overflow-hidden p-2 bg-[#FAF8F5] border border-stone-200/80 flex items-center justify-center shadow-2xs [&>svg]:w-full [&>svg]:h-full"
+                    dangerouslySetInnerHTML={{ __html: qrSvg }}
+                  />
+                ) : null}
+              </div>
+
+              <p className="text-[11px] font-serif text-stone-500 max-w-xs mx-auto">
+                Study buddy at your table? Point their camera at this screen to instantly sync daylight focus blocks.
+              </p>
+            </div>
+          )}
 
           {/* Copy Button */}
           <button
@@ -207,9 +256,21 @@ export const SquadRadarModal: React.FC<SquadRadarModalProps> = ({
           </button>
         </div>
 
-        {/* Subtle footer */}
-        <div className="text-[11px] text-stone-400 text-center font-serif italic pt-1">
-          cadence. sanctuary — zero spam, gentle human coordination
+        {/* Subtle footer with Legal & MIT License link */}
+        <div className="text-[11px] text-stone-400 text-center font-serif italic pt-1 flex flex-wrap items-center justify-center gap-2">
+          <span>cadence. sanctuary — zero spam, gentle human coordination</span>
+          {onOpenLegal && (
+            <>
+              <span aria-hidden="true">·</span>
+              <button
+                type="button"
+                onClick={onOpenLegal}
+                className="hover:text-stone-700 underline decoration-stone-300 cursor-pointer not-italic font-sans"
+              >
+                ⚖️ Legal & MIT License
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
