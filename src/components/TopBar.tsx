@@ -1,11 +1,12 @@
 import React from 'react';
-import { Plus, Users, Sparkles } from 'lucide-react';
+import { Plus, Users, Sparkles, BookOpen } from 'lucide-react';
 
 interface TopBarProps {
   activeTab: 'today' | 'schedule' | 'tasks' | 'settings';
   setActiveTab: (tab: 'today' | 'schedule' | 'tasks' | 'settings') => void;
   onOpenAdd: () => void;
   onOpenSquadRadar: () => void;
+  onOpenCourseTemplate?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -13,10 +14,11 @@ export const TopBar: React.FC<TopBarProps> = ({
   setActiveTab,
   onOpenAdd,
   onOpenSquadRadar,
+  onOpenCourseTemplate,
 }) => {
   return (
     <header className="sticky top-0 z-30 w-full bg-[#FAF8F5]/90 backdrop-blur-md border-b border-stone-200/80 transition-colors">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-8">
+      <div className="max-w-6xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-8">
         {/* Zone 1: Brand wordmark in warm lowercase serif */}
         <div className="flex items-center gap-2.5 shrink-0">
           <button 
@@ -69,20 +71,32 @@ export const TopBar: React.FC<TopBarProps> = ({
         </nav>
 
         {/* Zone 3: Squad Overlap Radar + Single Clean Consolidated + Add Action */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          {onOpenCourseTemplate && (
+            <button
+              onClick={onOpenCourseTemplate}
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs font-serif text-stone-700 bg-white/80 hover:bg-stone-200/60 border border-stone-200/90 rounded-xl transition-all cursor-pointer min-h-[40px] shadow-2xs"
+              title="Share as Course / Syllabus Template"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-stone-600 shrink-0" />
+              <span className="hidden sm:inline">course template.</span>
+              <span className="hidden xs:inline sm:hidden">syllabus.</span>
+            </button>
+          )}
+
           <button
             onClick={onOpenSquadRadar}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-serif text-stone-700 bg-white/80 hover:bg-stone-200/60 border border-stone-200/90 rounded-xl transition-all cursor-pointer min-h-[38px] shadow-2xs"
+            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs font-serif text-stone-700 bg-white/80 hover:bg-stone-200/60 border border-stone-200/90 rounded-xl transition-all cursor-pointer min-h-[40px] shadow-2xs"
             title="Instant 1-tap WhatsApp/Telegram sharing loop"
           >
-            <Users className="w-3.5 h-3.5 text-stone-600" />
+            <Users className="w-3.5 h-3.5 text-stone-600 shrink-0" />
             <span className="hidden sm:inline">squad radar.</span>
-            <span className="sm:hidden">radar.</span>
+            <span className="hidden xs:inline sm:hidden">radar.</span>
           </button>
 
           <button
             onClick={onOpenAdd}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-serif text-white bg-stone-900 hover:bg-stone-800 rounded-xl shadow-xs transition-all active:scale-[0.98] whitespace-nowrap cursor-pointer min-h-[38px]"
+            className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs font-serif text-white bg-stone-900 hover:bg-stone-800 rounded-xl shadow-xs transition-all active:scale-[0.98] whitespace-nowrap cursor-pointer min-h-[40px]"
           >
             <Plus className="w-3.5 h-3.5 text-stone-200" />
             <span>+ add.</span>

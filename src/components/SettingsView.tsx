@@ -11,9 +11,23 @@ import {
   Info,
   Calendar,
   Briefcase,
-  Smile
+  Smile,
+  Volume2,
+  VolumeX,
+  Waves,
+  CloudRain,
+  Wind,
+  Bell
 } from 'lucide-react';
 import { ScheduleSettings, DayMode } from '../types';
+import { 
+  getMasterVolume, 
+  setMasterVolume, 
+  getMasterSoundscape, 
+  setMasterSoundscape, 
+  playGentleBell,
+  NatureSoundType 
+} from '../utils/audio';
 
 interface SettingsViewProps {
   settings: ScheduleSettings;
@@ -38,6 +52,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 }) => {
   const [formData, setFormData] = useState<ScheduleSettings>(settings);
   const [savedFeedback, setSavedFeedback] = useState(false);
+  const [masterVolume, setMasterVolState] = useState<number>(() => getMasterVolume());
+  const [defaultSoundscape, setDefaultSoundscape] = useState<NatureSoundType>(() => getMasterSoundscape());
+  const [testPlaying, setTestPlaying] = useState(false);
+
+  const handleVolumeChange = (newVol: number) => {
+    const clamped = Math.max(0, Math.min(1, newVol));
+    setMasterVolState(clamped);
+    setMasterVolume(clamped);
+  };
+
+  const handleSoundscapeChange = (type: NatureSoundType) => {
+    setDefaultSoundscape(type);
+    setMasterSoundscape(type);
+  };
+
+  const handleTestChime = () => {
+    setTestPlaying(true);
+    playGentleBell('focus_start');
+    setTimeout(() => setTestPlaying(false), 1200);
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -449,14 +483,135 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
 
-        {/* SECTION 4: STATUTORY & LEGAL SANCTUARY */}
+        {/* SECTION 5: MASTER VOLUME & PROCEDURAL SOUNDSCAPES */}
+        <div className="bg-white/90 border border-stone-200/80 rounded-3xl p-6 sm:p-7 shadow-2xs space-y-5">
+          <div className="pb-4 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Volume2 className="w-4 h-4 text-stone-700" />
+                <h3 className="text-base font-serif font-medium text-stone-900">
+                  5. master audio volume & procedural focus soundscapes.
+                </h3>
+              </div>
+              <p className="text-xs font-serif italic text-stone-500 mt-0.5">
+                central master GainNode control for focus chimes and procedural nature soundscapes. 100% offline synthesis.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleTestChime}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-serif font-medium rounded-xl border transition-all cursor-pointer shadow-2xs self-start sm:self-auto min-h-[38px] ${
+                testPlaying 
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300 shadow-xs' 
+                  : 'bg-stone-50 text-stone-700 hover:bg-stone-100 border-stone-200'
+              }`}
+            >
+              <Bell className="w-3.5 h-3.5 text-stone-600" />
+              <span>{testPlaying ? 'Chiming...' : 'Test Chime Loudness'}</span>
+            </button>
+          </div>
+
+          {/* Master Volume Slider (0% to 100%, default 75%) */}
+          <div className="space-y-2 p-4 rounded-2xl bg-stone-50/80 border border-stone-200/80">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-serif font-medium text-stone-700 flex items-center gap-2">
+                {masterVolume === 0 ? (
+                  <VolumeX className="w-4 h-4 text-stone-400" />
+                ) : (
+                  <Volume2 className="w-4 h-4 text-stone-700" />
+                )}
+                <span>Master Volume Control</span>
+              </label>
+              <span className="font-mono text-xs font-semibold text-stone-900 bg-white px-2.5 py-1 rounded-lg border border-stone-200 tabular-nums">
+                {Math.round(masterVolume * 100)}%
+              </span>
+            </div>
+            
+            <div className="flex items-center gap-3 pt-1">
+              <span className="text-[11px] font-serif text-stone-400">0%</span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={masterVolume}
+                onChange={e => handleVolumeChange(parseFloat(e.target.value))}
+                className="w-full h-2 bg-stone-200 accent-stone-900 rounded-lg cursor-pointer"
+                aria-label="Master volume slider"
+              />
+              <span className="text-[11px] font-serif text-stone-400">100%</span>
+            </div>
+            <p className="text-[11px] font-serif text-stone-500 pt-1">
+              Scales all Solfeggio focus bells, transition chimes, and ambient noise generators through central master GainNode.
+            </p>
+          </div>
+
+          {/* Default Focus Soundscape Selection */}
+          <div className="space-y-2">
+            <label className="block text-xs font-serif font-medium text-stone-700">
+              Default Focus Soundscape (0 KB Procedural Synthesis)
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <button
+                type="button"
+                onClick={() => handleSoundscapeChange('none')}
+                className={`py-2 px-3 text-xs font-serif rounded-xl border transition-all text-left cursor-pointer flex items-center gap-2 ${
+                  defaultSoundscape === 'none'
+                    ? 'bg-stone-900 text-white font-medium shadow-xs border-stone-900'
+                    : 'bg-stone-50 text-stone-600 hover:bg-stone-100 border-stone-200'
+                }`}
+              >
+                <span>Mute</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSoundscapeChange('waves')}
+                className={`py-2 px-3 text-xs font-serif rounded-xl border transition-all text-left cursor-pointer flex items-center gap-2 ${
+                  defaultSoundscape === 'waves'
+                    ? 'bg-emerald-900 text-white font-medium shadow-xs border-emerald-900'
+                    : 'bg-stone-50 text-stone-600 hover:bg-stone-100 border-stone-200'
+                }`}
+              >
+                <Waves className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Ocean Waves</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSoundscapeChange('rain')}
+                className={`py-2 px-3 text-xs font-serif rounded-xl border transition-all text-left cursor-pointer flex items-center gap-2 ${
+                  defaultSoundscape === 'rain'
+                    ? 'bg-emerald-900 text-white font-medium shadow-xs border-emerald-900'
+                    : 'bg-stone-50 text-stone-600 hover:bg-stone-100 border-stone-200'
+                }`}
+              >
+                <CloudRain className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Rainfall</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSoundscapeChange('brook')}
+                className={`py-2 px-3 text-xs font-serif rounded-xl border transition-all text-left cursor-pointer flex items-center gap-2 ${
+                  defaultSoundscape === 'brook'
+                    ? 'bg-emerald-900 text-white font-medium shadow-xs border-emerald-900'
+                    : 'bg-stone-50 text-stone-600 hover:bg-stone-100 border-stone-200'
+                }`}
+              >
+                <Wind className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Brook Water</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION 6: STATUTORY & LEGAL SANCTUARY */}
         <div className="bg-white/80 border border-stone-200/80 rounded-3xl p-6 sm:p-7 shadow-2xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-0.5">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-stone-700" />
                 <h3 className="text-base font-serif font-medium text-stone-900">
-                  4. open source & zero-leak sanctuary terms
+                  6. open source & zero-leak sanctuary terms
                 </h3>
               </div>
               <p className="text-xs font-serif italic text-stone-500">
@@ -476,21 +631,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         {/* Action Save Bar */}
-        <div className="flex items-center justify-between pt-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
           {savedFeedback ? (
-            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-2 rounded-lg">
-              <Check className="w-4 h-4" />
+            <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3.5 py-2.5 rounded-xl border border-emerald-200">
+              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>Schedule updated and entire horizon rebalanced!</span>
             </div>
           ) : (
-            <span className="text-xs text-stone-400">
+            <span className="text-xs text-stone-400 font-serif">
               Saving updates and immediately realigns your entire horizon.
             </span>
           )}
 
           <button
             type="submit"
-            className="px-6 py-2.5 text-xs font-semibold text-white bg-stone-900 hover:bg-stone-800 rounded-xl transition-all shadow-sm active:scale-[0.98] cursor-pointer min-h-[44px]"
+            className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 text-xs font-serif font-medium text-white bg-stone-900 hover:bg-stone-800 rounded-xl transition-all shadow-sm active:scale-[0.98] cursor-pointer min-h-[44px]"
           >
             Save & Recalculate Horizon
           </button>

@@ -10,8 +10,11 @@ export interface LifeEvent {
   id: string;
   title: string;
   date: string; // 'YYYY-MM-DD'
-  time: string; // 'HH:mm'
+  time: string; // 'HH:mm' (start time)
+  endTime?: string; // 'HH:mm' (end time)
   durationMinutes: number;
+  bufferBeforeMinutes?: number; // Minutes before event when user stops work (wind-down / prep / travel)
+  bufferAfterMinutes?: number; // Minutes after event before normal work chunks resume (decompress / travel / recovery)
   location?: string;
   category: 'academic' | 'work' | 'personal' | 'social' | 'health';
   whatToBring: WhatToBringItem[];
@@ -52,6 +55,8 @@ export interface ScheduledSlot {
   chunkNumber: number;
   totalChunks: number;
   isDefault?: boolean;
+  isUnscheduled?: boolean;
+  unscheduledReason?: string;
 }
 
 export type DayMode = 'routine_work' | 'fully_home' | 'free_rest';

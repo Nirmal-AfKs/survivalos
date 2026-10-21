@@ -109,3 +109,51 @@ export function isEventOnDate(
     : `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
   return event.date === dateStr;
 }
+
+/**
+ * Computes ending time HH:mm from starting time HH:mm and duration in minutes
+ */
+export function calculateEndTime(startTime: string, durationMinutes: number): string {
+  if (!startTime) return '12:00';
+  const [h, m] = startTime.split(':').map(Number);
+  let totalMinutes = ((h || 0) * 60 + (m || 0) + (durationMinutes || 0)) % (24 * 60);
+  if (totalMinutes < 0) totalMinutes += 24 * 60;
+  const endH = Math.floor(totalMinutes / 60);
+  const endM = totalMinutes % 60;
+  return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+}
+
+/**
+ * Computes duration in minutes between start time HH:mm and end time HH:mm
+ */
+export function calculateDurationFromTimes(startTime: string, endTime: string): number {
+  if (!startTime || !endTime) return 60;
+  const [sh, sm] = startTime.split(':').map(Number);
+  const [eh, em] = endTime.split(':').map(Number);
+  let startTotal = (sh || 0) * 60 + (sm || 0);
+  let endTotal = (eh || 0) * 60 + (em || 0);
+  if (endTotal < startTotal) {
+    endTotal += 24 * 60; // Crosses midnight
+  }
+  return Math.max(15, endTotal - startTotal);
+}
+
+/**
+ * Format event time span (e.g. "10:00 – 11:30")
+ */
+export function formatEventTimeSpan(event: { time: string; endTime?: string; durationMinutes: number }): string {
+  const start = event.time || '10:00';
+  const end = event.endTime || calculateEndTime(start, event.durationMinutes || 60);
+  return `${start} – ${end}`;
+}
+
+/**
+ * Format minute buffer into human-friendly duration (e.g. "15m", "1h", "1.5h")
+ */
+export function formatBufferLabel(minutes: number): string {
+  if (minutes === 0) return '0m';
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const rem = minutes % 60;
+  return rem > 0 ? `${(minutes / 60).toFixed(1).replace('.0', '')}h` : `${hours}h`;
+}

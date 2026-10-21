@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, Clock, Calendar, Link as LinkIcon, Sparkles, Package, MapPin, Plus, Repeat } from 'lucide-react';
+import { X, Clock, Calendar, Link as LinkIcon, Sparkles, Package, MapPin, Plus, Repeat, Shield } from 'lucide-react';
 import { LifeEvent, ScheduleSettings, WorkTask, WhatToBringItem } from '../types';
 import { formatDateKey, addDays, RECURRING_WEEK_DAYS, formatRecurringDaysShort } from '../utils/scheduler';
+import { calculateEndTime, calculateDurationFromTimes } from '../utils/format';
 
 interface UnifiedAddModalProps {
   isOpen: boolean;
@@ -23,6 +24,28 @@ const DURATION_PRESETS = [
   { label: '3h', minutes: 180 },
   { label: '4h', minutes: 240 },
   { label: '6h', minutes: 360 },
+];
+
+const BUFFER_BEFORE_OPTIONS = [
+  { value: 0, label: '0m · Stop work right at start time' },
+  { value: 15, label: '15m · Quick pack up & wind-down' },
+  { value: 30, label: '30m · Commute & prep (Recommended)' },
+  { value: 45, label: '45m · Extended transit & setup' },
+  { value: 60, label: '1 hour · Transit & wind-down' },
+  { value: 90, label: '1.5 hours · Distance commute' },
+  { value: 120, label: '2 hours · Heavy prep / long journey' },
+  { value: 180, label: '3 hours · Full travel corridor' },
+];
+
+const BUFFER_AFTER_OPTIONS = [
+  { value: 0, label: '0m · Resume work immediately after' },
+  { value: 15, label: '15m · Quick breather & desk reset' },
+  { value: 30, label: '30m · Return home & coffee (Recommended)' },
+  { value: 45, label: '45m · Return to workflow & reset' },
+  { value: 60, label: '1 hour · Travel home & meal break' },
+  { value: 90, label: '1.5 hours · Decompress & dinner' },
+  { value: 120, label: '2 hours · Full decompression & rest' },
+  { value: 180, label: '3 hours · Extended recovery' },
 ];
 
 const CATEGORIES = ['Writing', 'Study', 'Design', 'Code', 'Deep Work', 'Life', 'Reading'];
@@ -62,7 +85,10 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
   const [eventTitle, setEventTitle] = useState('');
   const [eventDate, setEventDate] = useState(defaultEventDate);
   const [eventTime, setEventTime] = useState('11:00');
+  const [eventEndTime, setEventEndTime] = useState('12:00');
   const [eventDuration, setEventDuration] = useState(60);
+  const [bufferBeforeMinutes, setBufferBeforeMinutes] = useState(30);
+  const [bufferAfterMinutes, setBufferAfterMinutes] = useState(30);
   const [recurringDays, setRecurringDays] = useState<number[]>([]);
   const [eventLocation, setEventLocation] = useState('');
   const [eventCategory, setEventCategory] = useState<'academic' | 'work' | 'personal' | 'social' | 'health'>('work');
@@ -71,6 +97,24 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
     'Water Bottle',
   ]);
   const [newBringItem, setNewBringItem] = useState('');
+
+  const handleStartTimeChange = (newStart: string) => {
+    setEventTime(newStart);
+    setEventEndTime(calculateEndTime(newStart, eventDuration));
+  };
+
+  const handleEndTimeChange = (newEnd: string) => {
+    setEventEndTime(newEnd);
+    setEventDuration(calculateDurationFromTimes(eventTime, newEnd));
+  };
+
+  const handleDurationPresetSelect = (mins: number) => {
+    setEventDuration(mins);
+    setEventEndTime(calculateEndTime(eventTime, mins));
+  };
+
+  const workPausesAt = calculateEndTime(eventTime, -bufferBeforeMinutes);
+  const workResumesAt = calculateEndTime(eventEndTime, bufferAfterMinutes);
 
   const toggleRecurringDay = (dayIndex: number) => {
     setRecurringDays(prev =>
@@ -130,7 +174,10 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
       title: eventTitle.trim(),
       date: finalDate,
       time: eventTime,
+      endTime: eventEndTime,
       durationMinutes: eventDuration,
+      bufferBeforeMinutes,
+      bufferAfterMinutes,
       category: eventCategory,
       location: eventLocation.trim() || undefined,
       color: 'stone',
@@ -144,9 +191,9 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-xs overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-900/40 backdrop-blur-xs overflow-y-auto">
       <div 
-        className="bg-[#FAF8F5] rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-xl border border-stone-200/80 my-8 space-y-5 animate-in fade-in zoom-in-95 duration-150 text-stone-900"
+        className="bg-[#FAF8F5] rounded-3xl max-w-lg w-full p-4.5 sm:p-7 shadow-xl border border-stone-200/80 my-auto sm:my-8 max-h-[92vh] overflow-y-auto space-y-4 sm:space-y-5 animate-in fade-in zoom-in-95 duration-150 text-stone-900"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -155,13 +202,14 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
             <div className="text-xs font-serif italic text-stone-500">
               gentle input.
             </div>
-            <h2 className="text-2xl font-serif font-normal tracking-tight text-stone-900">
+            <h2 className="text-xl sm:text-2xl font-serif font-normal tracking-tight text-stone-900">
               add to cadence.
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-200/50 transition-colors"
+            className="p-2 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-200/50 transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer"
+            aria-label="Close dialog"
           >
             <X className="w-5 h-5" />
           </button>
@@ -172,7 +220,7 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
           <button
             type="button"
             onClick={() => setMode('work')}
-            className={`flex-1 py-2 text-xs font-serif rounded-lg transition-all cursor-pointer ${
+            className={`flex-1 py-2.5 sm:py-2 text-xs font-serif rounded-lg transition-all cursor-pointer min-h-[42px] flex items-center justify-center ${
               mode === 'work'
                 ? 'bg-white text-stone-900 font-semibold shadow-xs'
                 : 'text-stone-600 hover:text-stone-900'
@@ -183,7 +231,7 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
           <button
             type="button"
             onClick={() => setMode('event')}
-            className={`flex-1 py-2 text-xs font-serif rounded-lg transition-all cursor-pointer ${
+            className={`flex-1 py-2.5 sm:py-2 text-xs font-serif rounded-lg transition-all cursor-pointer min-h-[42px] flex items-center justify-center ${
               mode === 'event'
                 ? 'bg-white text-stone-900 font-semibold shadow-xs'
                 : 'text-stone-600 hover:text-stone-900'
@@ -359,34 +407,146 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-serif text-stone-700 mb-1">
-                  date {recurringDays.length > 0 && <span className="text-stone-400 font-sans italic text-[11px]">(repeats weekly)</span>}
-                </label>
-                <input
-                  type="date"
-                  required={recurringDays.length === 0}
-                  disabled={recurringDays.length > 0}
-                  value={eventDate}
-                  onChange={e => setEventDate(e.target.value)}
-                  className={`w-full px-3 py-2 text-xs bg-white/80 border border-stone-200/90 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-stone-900 tabular-nums text-stone-800 ${
-                    recurringDays.length > 0 ? 'opacity-50 cursor-not-allowed' : ''
-                  }`}
-                />
+            {/* Date Field */}
+            <div>
+              <label className="block text-xs font-serif text-stone-700 mb-1">
+                date {recurringDays.length > 0 && <span className="text-stone-400 font-sans italic text-[11px]">(repeats weekly)</span>}
+              </label>
+              <input
+                type="date"
+                required={recurringDays.length === 0}
+                disabled={recurringDays.length > 0}
+                value={eventDate}
+                onChange={e => setEventDate(e.target.value)}
+                className={`w-full px-3 py-2 text-xs bg-white/80 border border-stone-200/90 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-stone-900 tabular-nums text-stone-800 ${
+                  recurringDays.length > 0 ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              />
+            </div>
+
+            {/* Starting Time & Ending Time with Synced Duration */}
+            <div className="space-y-2 p-3.5 rounded-2xl bg-white/70 border border-stone-200/80">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-serif font-medium text-stone-700 mb-1 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-stone-500" />
+                    <span>starting time</span>
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={eventTime}
+                    onChange={e => handleStartTimeChange(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-stone-200/90 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-stone-900 tabular-nums font-mono text-stone-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-serif font-medium text-stone-700 mb-1 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-stone-500" />
+                    <span>ending time</span>
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={eventEndTime}
+                    onChange={e => handleEndTimeChange(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-stone-200/90 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-stone-900 tabular-nums font-mono text-stone-900"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-serif text-stone-700 mb-1">
-                  time
-                </label>
-                <input
-                  type="time"
-                  required
-                  value={eventTime}
-                  onChange={e => setEventTime(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-white/80 border border-stone-200/90 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-stone-900 tabular-nums text-stone-800"
-                />
+              {/* Quick duration presets chips */}
+              <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1.5 border-t border-stone-100">
+                <span className="text-[11px] font-serif text-stone-500">quick duration:</span>
+                <div className="flex flex-wrap items-center gap-1">
+                  {[
+                    { label: '30m', mins: 30 },
+                    { label: '45m', mins: 45 },
+                    { label: '1h', mins: 60 },
+                    { label: '1.5h', mins: 90 },
+                    { label: '2h', mins: 120 },
+                    { label: '3h', mins: 180 },
+                  ].map(preset => (
+                    <button
+                      key={preset.mins}
+                      type="button"
+                      onClick={() => handleDurationPresetSelect(preset.mins)}
+                      className={`px-2 py-0.5 text-[11px] font-serif rounded-lg border transition-colors cursor-pointer ${
+                        eventDuration === preset.mins
+                          ? 'bg-stone-900 text-white font-medium border-stone-900 shadow-2xs'
+                          : 'bg-white text-stone-600 hover:bg-stone-100 border-stone-200/80'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                  <span className="text-[11px] font-mono text-stone-700 bg-stone-100 px-2 py-0.5 rounded-lg border border-stone-200 font-semibold">
+                    {eventDuration}m total
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Work Protection Buffers Before & After Event */}
+            <div className="space-y-3 p-3.5 rounded-2xl bg-amber-50/60 border border-amber-200/90 shadow-2xs">
+              <div className="flex items-center gap-1.5 text-xs font-serif font-semibold text-stone-800">
+                <Shield className="w-3.5 h-3.5 text-amber-700" />
+                <span>Focus Protection Buffers (Stop Before & Resume After)</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Wind-Down Before Buffer */}
+                <div>
+                  <label className="block text-[11px] font-serif text-stone-700 mb-1">
+                    Stop work before event (Prep / Commute):
+                  </label>
+                  <select
+                    value={bufferBeforeMinutes}
+                    onChange={e => setBufferBeforeMinutes(Number(e.target.value))}
+                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-stone-200/90 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-stone-900 text-stone-800 font-serif"
+                  >
+                    {BUFFER_BEFORE_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="text-[10px] text-stone-500 font-serif pt-1">
+                    Focus stops by <strong className="text-stone-800 font-mono">{workPausesAt}</strong>
+                  </div>
+                </div>
+
+                {/* Recovery After Buffer */}
+                <div>
+                  <label className="block text-[11px] font-serif text-stone-700 mb-1">
+                    Resume workflow after (Recovery / Return):
+                  </label>
+                  <select
+                    value={bufferAfterMinutes}
+                    onChange={e => setBufferAfterMinutes(Number(e.target.value))}
+                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-stone-200/90 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-stone-900 text-stone-800 font-serif"
+                  >
+                    {BUFFER_AFTER_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="text-[10px] text-stone-500 font-serif pt-1">
+                    Focus resumes at <strong className="text-stone-800 font-mono">{workResumesAt}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Protected Corridor Indicator */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] font-mono text-stone-700 border-t border-amber-200/70">
+                <span className="text-amber-900 font-medium font-serif">Protected window:</span>
+                <span className="bg-white px-2 py-0.5 rounded-md border border-amber-200 text-stone-900">{workPausesAt}</span>
+                <span className="text-stone-400">→</span>
+                <span className="bg-stone-900 text-white px-2 py-0.5 rounded-md font-semibold">{eventTime} – {eventEndTime}</span>
+                <span className="text-stone-400">→</span>
+                <span className="bg-white px-2 py-0.5 rounded-md border border-amber-200 text-stone-900">{workResumesAt}</span>
               </div>
             </div>
 

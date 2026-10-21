@@ -17,7 +17,11 @@ import {
   formatChunkTitle, 
   formatRecurringDaysShort, 
   isEventOnDate, 
-  RECURRING_WEEK_DAYS 
+  RECURRING_WEEK_DAYS,
+  calculateEndTime,
+  calculateDurationFromTimes,
+  formatEventTimeSpan,
+  formatBufferLabel
 } from '../src/utils/format';
 import { 
   isDefaultItem, 
@@ -31,6 +35,19 @@ import {
   saveEvents
 } from '../src/utils/storage';
 import { WorkTask, LifeEvent, ScheduledSlot, ScheduleSettings, SquadSharePayload } from '../src/types';
+import { 
+  encodeTemplatePayload, 
+  decodeTemplatePayload, 
+  materializeTemplate, 
+  buildTemplateShareUrl,
+  CourseTemplatePayload 
+} from '../src/utils/template';
+import {
+  getMasterVolume,
+  setMasterVolume,
+  getMasterSoundscape,
+  setMasterSoundscape
+} from '../src/utils/audio';
 
 // In-memory localStorage mock for node test runner
 const store: Record<string, string> = {};
@@ -462,4 +479,329 @@ it('enforces finishDayBeforeDeadline buffer when enabled', () => {
   });
 });
 
+it('gracefully moves overflowing chunks to Unscheduled / Capacity Exceeded holding shelf when capacity is exceeded', () => {
+  const baseDate = new Date(2026, 9, 20);
+  // Task needs 20 hours (40 chunks of 30 min), but deadline is tomorrow
+  const tasks: WorkTask[] = [
+    {
+      id: 'task-overflow',
+      title: 'Massive Research Compendium',
+      estimatedMinutes: 20 * 60, // 1200 mins
+      completedMinutes: 0,
+      deadlineDate: formatDateKey(addDays(baseDate, 1)), // Tomorrow
+      category: 'academic',
+      color: 'amber',
+      priority: 'high',
+      status: 'active',
+      createdAt: baseDate.toISOString()
+    }
+  ];
+
+  const settings: ScheduleSettings = {
+    ...DEFAULT_SETTINGS,
+    finishDayBeforeDeadline: false
+  };
+
+  const slots = recalculateSchedule(tasks, [], settings, [], baseDate);
+  const unscheduled = slots.filter(s => s.isUnscheduled);
+
+  assert.ok(unscheduled.length > 0, 'Expected overflowing chunks to be placed in holding shelf');
+  assert.strictEqual(unscheduled[0].date, 'unscheduled');
+  assert.strictEqual(unscheduled[0].unscheduledReason, 'Capacity exceeded before deadline window');
+});
+
+// ==========================================
+// 5. PWA MANIFEST & INSTALLABILITY
+// ==========================================
+console.log('\n📌 Testing PWA Manifest & Web Standards:');
+
+it('validates PWA manifest.json configuration for standalone offline installation', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const manifestPath = path.resolve('public/manifest.json');
+  assert.ok(fs.existsSync(manifestPath), 'manifest.json must exist in public directory');
+  
+  const content = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  assert.strictEqual(content.display, 'standalone', 'display must be standalone');
+  assert.ok(content.start_url, 'start_url must be defined');
+  assert.ok(content.theme_color, 'theme_color must match aesthetic');
+  assert.ok(Array.isArray(content.icons), 'icons must be an array');
+  assert.ok(content.icons.some((i: any) => i.sizes === '192x192'), 'must include 192x192 icon');
+  assert.ok(content.icons.some((i: any) => i.sizes === '512x512'), 'must include 512x512 icon');
+});
+
+// ==========================================
+// 6. 1-CLICK COURSE TEMPLATE ENGINE TESTS
+// ==========================================
+console.log('\n📌 Testing 1-Click Course Template Engine (Scenario C+ Hyperedge Seeding):');
+
+it('encodes and decodes course syllabus templates using compact base64 representation', () => {
+  const sampleTemplate: CourseTemplatePayload = {
+    v: 1,
+    name: 'Organic Chemistry Fall Syllabus',
+    tasks: [
+      {
+        title: 'Reaction Mechanisms Problem Set 1',
+        estimatedMinutes: 180,
+        relativeDays: 3,
+        category: 'academic',
+        priority: 'high',
+        color: 'stone'
+      },
+      {
+        title: 'Midterm 1 Examination Prep',
+        estimatedMinutes: 300,
+        relativeDays: 8,
+        category: 'study',
+        priority: 'high',
+        color: 'stone'
+      }
+    ],
+    events: [
+      {
+        title: 'Orgo Lecture',
+        time: '10:00',
+        durationMinutes: 90,
+        recurringDays: [1, 3], // Mon, Wed
+        category: 'academic'
+      }
+    ]
+  };
+
+  const encoded = encodeTemplatePayload(sampleTemplate);
+  assert.ok(encoded.length > 0, 'Encoded string should be non-empty');
+  assert.strictEqual(typeof encoded, 'string');
+
+  const decoded = decodeTemplatePayload(encoded);
+  assert.ok(decoded !== null, 'Decoded template must not be null');
+  assert.strictEqual(decoded!.name, 'Organic Chemistry Fall Syllabus');
+  assert.strictEqual(decoded!.tasks.length, 2);
+  assert.strictEqual(decoded!.tasks[0].title, 'Reaction Mechanisms Problem Set 1');
+  assert.strictEqual(decoded!.tasks[0].estimatedMinutes, 180);
+  assert.strictEqual(decoded!.tasks[0].relativeDays, 3);
+  assert.strictEqual(decoded!.events?.length, 1);
+  assert.strictEqual(decoded!.events![0].title, 'Orgo Lecture');
+});
+
+it('materializes template tasks with relative deadlines anchored to local today date', () => {
+  const template: CourseTemplatePayload = {
+    v: 1,
+    name: 'Calculus III Intensive',
+    tasks: [
+      {
+        title: 'Vector Fields Homework',
+        estimatedMinutes: 90,
+        relativeDays: 2,
+        category: 'academic'
+      },
+      {
+        title: 'Green Theorem Project',
+        estimatedMinutes: 240,
+        relativeDays: 7,
+        category: 'academic'
+      }
+    ]
+  };
+
+  const baseDate = new Date(2026, 9, 20); // Tuesday, Oct 20
+  const result = materializeTemplate(template, baseDate);
+
+  assert.strictEqual(result.tasks.length, 2);
+  // Task 1: 2 days after Oct 20 -> Oct 22
+  assert.strictEqual(result.tasks[0].deadlineDate, '2026-10-22');
+  assert.strictEqual(result.tasks[0].title, 'Vector Fields Homework');
+  assert.strictEqual(result.tasks[0].estimatedMinutes, 90);
+  // Task 2: 7 days after Oct 20 -> Oct 27
+  assert.strictEqual(result.tasks[1].deadlineDate, '2026-10-27');
+  assert.strictEqual(result.tasks[1].title, 'Green Theorem Project');
+});
+
+it('builds valid template share URLs with #template= fragment', () => {
+  const template: CourseTemplatePayload = {
+    v: 1,
+    name: 'CS106B',
+    tasks: [
+      { title: 'Recursion Lab', estimatedMinutes: 60, relativeDays: 1, category: 'academic' }
+    ]
+  };
+
+  const url = buildTemplateShareUrl(template);
+  assert.ok(url.includes('#template='), 'Share URL must contain #template=');
+  assert.ok(url.startsWith('https://'), 'Share URL must use secure https://');
+});
+
+// ==========================================
+// 8. MASTER VOLUME & PROCEDURAL SOUNDSCAPES
+// ==========================================
+console.log('📌 Testing Master Volume & Procedural Soundscapes:');
+
+it('correctly returns 0.75 default master volume when unset', () => {
+  localStorage.removeItem('cadence_master_volume');
+  assert.strictEqual(getMasterVolume(), 0.75);
+});
+
+it('clamps and persists master volume updates between 0.0 and 1.0 in localStorage', () => {
+  setMasterVolume(0.85);
+  assert.strictEqual(getMasterVolume(), 0.85);
+
+  // Test lower clamp
+  setMasterVolume(-0.2);
+  assert.strictEqual(getMasterVolume(), 0);
+
+  // Test upper clamp
+  setMasterVolume(1.5);
+  assert.strictEqual(getMasterVolume(), 1);
+
+  // Reset to default 75%
+  setMasterVolume(0.75);
+  assert.strictEqual(getMasterVolume(), 0.75);
+});
+
+it('defaults to none soundscape when unset and persists valid nature soundscapes', () => {
+  localStorage.removeItem('cadence_focus_soundscape');
+  assert.strictEqual(getMasterSoundscape(), 'none');
+
+  setMasterSoundscape('waves');
+  assert.strictEqual(getMasterSoundscape(), 'waves');
+
+  setMasterSoundscape('rain');
+  assert.strictEqual(getMasterSoundscape(), 'rain');
+
+  setMasterSoundscape('brook');
+  assert.strictEqual(getMasterSoundscape(), 'brook');
+
+  setMasterSoundscape('none');
+  assert.strictEqual(getMasterSoundscape(), 'none');
+});
+
+// ============================================================
+// 9. EVENT START/END TIMES & WORK BUFFER PROTECTION CORRIDORS
+// ============================================================
+console.log('📌 Testing Event Start/End Times & Work Buffer Corridors:');
+
+it('calculates ending time and handles positive and negative offsets accurately', () => {
+  assert.strictEqual(calculateEndTime('14:00', 90), '15:30');
+  assert.strictEqual(calculateEndTime('09:00', 60), '10:00');
+  assert.strictEqual(calculateEndTime('10:00', -30), '09:30'); // Work pause before event
+  assert.strictEqual(calculateEndTime('15:30', 45), '16:15'); // Work resume after event
+});
+
+it('calculates duration in minutes accurately between start and end times', () => {
+  assert.strictEqual(calculateDurationFromTimes('10:00', '11:30'), 90);
+  assert.strictEqual(calculateDurationFromTimes('13:15', '14:45'), 90);
+  assert.strictEqual(calculateDurationFromTimes('15:00', '16:00'), 60);
+});
+
+it('formats event time spans and buffer labels for clear human reading', () => {
+  const eventWithEnd: LifeEvent = {
+    id: 'e1',
+    title: 'Design Review',
+    date: '2026-10-25',
+    time: '10:00',
+    endTime: '11:30',
+    durationMinutes: 90,
+    category: 'academic',
+    color: 'indigo',
+    whatToBring: []
+  };
+  assert.strictEqual(formatEventTimeSpan(eventWithEnd), '10:00 – 11:30');
+
+  const eventWithoutEnd: LifeEvent = {
+    id: 'e2',
+    title: 'Lab Session',
+    date: '2026-10-25',
+    time: '14:00',
+    durationMinutes: 60,
+    category: 'academic',
+    color: 'emerald',
+    whatToBring: []
+  };
+  assert.strictEqual(formatEventTimeSpan(eventWithoutEnd), '14:00 – 15:00');
+
+  assert.strictEqual(formatBufferLabel(0), '0m');
+  assert.strictEqual(formatBufferLabel(15), '15m');
+  assert.strictEqual(formatBufferLabel(45), '45m');
+  assert.strictEqual(formatBufferLabel(60), '1h');
+  assert.strictEqual(formatBufferLabel(90), '1.5h');
+  assert.strictEqual(formatBufferLabel(120), '2h');
+});
+
+it('strictly preserves work blackout buffer corridor before and after life events', () => {
+  const baseDate = new Date(2026, 9, 25); // Sunday (2026-10-25)
+  const targetDateKey = formatDateKey(baseDate);
+  const testSettings: ScheduleSettings = {
+    ...DEFAULT_SETTINGS,
+    dateSpecificModes: { [targetDateKey]: 'fully_home' },
+    fullyHomeDay: {
+      ...DEFAULT_SETTINGS.fullyHomeDay,
+      startHour: '09:00',
+      endHour: '18:00',
+      applicableDays: [0, 6],
+      maxDailyMinutes: 360,
+    },
+    focusBlockMinutes: 45,
+    breakIntervalMinutes: 15,
+  };
+
+  // Event from 13:00 to 14:30 with 30m prep buffer and 45m recovery buffer
+  // Blackout corridor must span 12:30 to 15:15
+  const protectedEvent: LifeEvent = {
+    id: 'ev-protected-symposium',
+    title: 'Thesis Symposium',
+    date: targetDateKey,
+    time: '13:00',
+    endTime: '14:30',
+    durationMinutes: 90,
+    bufferBeforeMinutes: 30, // Stop work at 12:30
+    bufferAfterMinutes: 45,  // Resume work at 15:15
+    category: 'academic',
+    color: 'indigo',
+    whatToBring: []
+  };
+
+  const testTask: WorkTask = {
+    id: 'task-long-prep',
+    title: 'Prepare Presentation Slides',
+    category: 'academic',
+    deadlineDate: formatDateKey(addDays(baseDate, 3)),
+    estimatedMinutes: 270,
+    completedMinutes: 0,
+    color: 'emerald',
+    priority: 'high',
+    status: 'active',
+    createdAt: baseDate.toISOString(),
+  };
+
+  const slots = recalculateSchedule(
+    [testTask],
+    [protectedEvent],
+    testSettings,
+    [],
+    baseDate
+  );
+
+  const daySlots = slots.filter(s => s.date === targetDateKey);
+  assert.ok(daySlots.length > 0, 'Should have generated slots for fully_home day');
+
+  // Verify that NO slot falls inside the blackout corridor [12:30 (750m), 15:15 (915m)]
+  const corridorStartMinutes = 12 * 60 + 30; // 750
+  const corridorEndMinutes = 15 * 60 + 15;   // 915
+
+  for (const slot of daySlots) {
+    const [sh, sm] = slot.startTime.split(':').map(Number);
+    const [eh, em] = slot.endTime.split(':').map(Number);
+    const slotStartMin = sh * 60 + sm;
+    const slotEndMin = eh * 60 + em;
+
+    const overlaps = (slotStartMin < corridorEndMinutes && slotEndMin > corridorStartMinutes);
+    assert.strictEqual(
+      overlaps, 
+      false, 
+      `Slot ${slot.startTime}-${slot.endTime} must not overlap protected buffer corridor 12:30-15:15`
+    );
+  }
+});
+
 console.log(`\n🎉 ALL ${passedTests}/${totalTests} TESTS PASSED WITH 100% SUCCESS!`);
+
+

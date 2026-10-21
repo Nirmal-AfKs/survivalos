@@ -8,6 +8,8 @@ import { SettingsView } from './components/SettingsView';
 import { UnifiedAddModal } from './components/UnifiedAddModal';
 import { SquadRadarModal } from './components/SquadRadarModal';
 import { FocusTimerModal } from './components/FocusTimerModal';
+import { InstallPromptBanner } from './components/InstallPromptBanner';
+import { CourseTemplateModal } from './components/CourseTemplateModal';
 const LegalLicenseModal = React.lazy(() => import('./components/LegalLicenseModal').then(m => ({ default: m.LegalLicenseModal })));
 import { 
   WorkTask, 
@@ -35,6 +37,7 @@ import {
 import { formatDateKey, recalculateSchedule, addDays } from './utils/scheduler';
 import { parseSquadFromUrl, encodeSquadPayload } from './utils/squad';
 import { cleanTaskTitle } from './utils/format';
+import { parseTemplateFromUrl, materializeTemplate, CourseTemplatePayload } from './utils/template';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'today' | 'schedule' | 'tasks' | 'settings'>('today');
@@ -54,18 +57,65 @@ export default function App() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isSquadRadarOpen, setIsSquadRadarOpen] = useState(false);
   const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
+  const [isCourseTemplateOpen, setIsCourseTemplateOpen] = useState(false);
+  const [templateNotice, setTemplateNotice] = useState<{ name: string; taskCount: number } | null>(null);
   const [activeFocusSlot, setActiveFocusSlot] = useState<ScheduledSlot | null>(null);
+  const [focusTimerMode, setFocusTimerMode] = useState<'focus' | 'ramp_up'>('focus');
   const todayKey = formatDateKey(new Date());
+
+  // 1-Click Course / Syllabus Template Engine (Scenario C+ Hyperedge Seeding)
+  const handleApplyTemplate = (template: CourseTemplatePayload) => {
+    const { tasks: tplTasks, events: tplEvents } = materializeTemplate(template, new Date());
+
+    const userTasks = tasks.filter(t => !isDefaultItem(t));
+    const userEvents = events.filter(e => !isDefaultItem(e));
+
+    const updatedTasks = [...tplTasks, ...userTasks];
+    const updatedEvents = [...tplEvents, ...userEvents];
+
+    setTasks(updatedTasks);
+    saveTasks(updatedTasks);
+
+    setEvents(updatedEvents);
+    saveEvents(updatedEvents);
+
+    const rebalanced = recalculateSchedule(updatedTasks, updatedEvents, settings, [], new Date());
+    setSlots(rebalanced);
+    saveSlots(rebalanced);
+
+    setIsSampleSchedule(false);
+    saveIsSampleSchedule(false);
+
+    setTemplateNotice({
+      name: template.name,
+      taskCount: tplTasks.length,
+    });
+
+    setActiveTab('today');
+
+    try {
+      window.history.replaceState(null, '', window.location.pathname);
+    } catch {
+      window.location.hash = '';
+    }
+  };
 
   useEffect(() => {
     document.title = 'cadence. — daylight focus & squad rhythm';
 
-    // Check for #squad= on mount or on hash changes
+    // Check for #template= or #squad= on mount or on hash changes
     const handleCheckHash = () => {
-      const parsed = parseSquadFromUrl();
-      if (parsed) {
-        setInboundSquad(parsed);
-        // Requirement 1: strictly keep visitor on "today." view and skip sample schedule
+      // Check for #template= first
+      const parsedTemplate = parseTemplateFromUrl();
+      if (parsedTemplate) {
+        handleApplyTemplate(parsedTemplate);
+        return;
+      }
+
+      // Check for #squad=
+      const parsedSquad = parseSquadFromUrl();
+      if (parsedSquad) {
+        setInboundSquad(parsedSquad);
         setActiveTab('today');
         setIsSampleSchedule(false);
         saveIsSampleSchedule(false);
@@ -75,7 +125,7 @@ export default function App() {
     handleCheckHash();
     window.addEventListener('hashchange', handleCheckHash);
     return () => window.removeEventListener('hashchange', handleCheckHash);
-  }, []);
+  }, [tasks, events, settings]);
 
   // Toggle slot completion
   const handleToggleSlotComplete = (slotId: string) => {
@@ -422,10 +472,41 @@ export default function App() {
         setActiveTab={setActiveTab}
         onOpenAdd={() => setIsAddOpen(true)}
         onOpenSquadRadar={() => setIsSquadRadarOpen(true)}
+        onOpenCourseTemplate={() => setIsCourseTemplateOpen(true)}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-24 md:pb-16">
+        {/* Subtle, Non-Intrusive PWA Install Banner */}
+        <InstallPromptBanner />
+
+        {/* Course / Syllabus Template Loaded Banner */}
+        {templateNotice && (
+          <div className="mb-4 bg-emerald-50 border border-emerald-300/80 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-serif text-emerald-950 shadow-2xs animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="flex items-center gap-3">
+              <span className="w-8 h-8 rounded-xl bg-emerald-800 text-white flex items-center justify-center shrink-0 text-base">
+                📚
+              </span>
+              <div>
+                <div className="font-semibold text-emerald-900 text-sm">
+                  Loaded Course Template: {templateNotice.name}
+                </div>
+                <div className="text-emerald-700">
+                  {templateNotice.taskCount} assignments & relative deadlines automatically populated into your daylight rhythm!
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setTemplateNotice(null)}
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-800 text-white hover:bg-emerald-900 transition-colors font-medium cursor-pointer shadow-2xs"
+              >
+                Got It
+              </button>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'today' && (
           <TodayView
             todayKey={todayKey}
@@ -438,7 +519,10 @@ export default function App() {
             matchedSlotId={matchedSlotId}
             onClearSample={handleClearSampleSchedule}
             onToggleSlotComplete={handleToggleSlotComplete}
-            onStartFocus={slot => setActiveFocusSlot(slot)}
+            onStartFocus={(slot, mode = 'focus') => {
+              setActiveFocusSlot(slot);
+              setFocusTimerMode(mode);
+            }}
             onRescheduleSlot={handleRescheduleSlot}
             onOpenAdd={() => setIsAddOpen(true)}
             onOpenSquadRadar={() => setIsSquadRadarOpen(true)}
@@ -460,10 +544,14 @@ export default function App() {
             isSampleSchedule={isSampleSchedule}
             onClearSample={handleClearSampleSchedule}
             onToggleSlotComplete={handleToggleSlotComplete}
-            onStartFocus={slot => setActiveFocusSlot(slot)}
+            onStartFocus={slot => {
+              setActiveFocusSlot(slot);
+              setFocusTimerMode('focus');
+            }}
             onToggleWhatToBring={handleToggleWhatToBring}
             onRebalance={handleRebalance}
             onSetDateSpecificMode={handleSetDateSpecificMode}
+            onOpenCourseTemplate={() => setIsCourseTemplateOpen(true)}
           />
         )}
 
@@ -476,6 +564,7 @@ export default function App() {
             onClearSample={handleClearSampleSchedule}
             onOpenAddWork={() => setIsAddOpen(true)}
             onOpenAddEvent={() => setIsAddOpen(true)}
+            onOpenCourseTemplate={() => setIsCourseTemplateOpen(true)}
             onDeleteTask={handleDeleteTask}
             onDeleteEvent={handleDeleteEvent}
             onToggleWhatToBring={handleToggleWhatToBring}
@@ -548,10 +637,22 @@ export default function App() {
         </React.Suspense>
       )}
 
+      {/* Course / Syllabus Template Modal */}
+      {isCourseTemplateOpen && (
+        <CourseTemplateModal
+          isOpen={isCourseTemplateOpen}
+          onClose={() => setIsCourseTemplateOpen(false)}
+          tasks={tasks}
+          events={events}
+          todayKey={todayKey}
+        />
+      )}
+
       {/* Serene Focus Timer */}
       {activeFocusSlot && (
         <FocusTimerModal
           slot={activeFocusSlot}
+          initialMode={focusTimerMode}
           onClose={() => setActiveFocusSlot(null)}
           onCompleteSlot={slotId => {
             handleToggleSlotComplete(slotId);

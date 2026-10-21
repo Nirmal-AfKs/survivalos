@@ -85,9 +85,21 @@ export function getDailySlotTemplates(date: Date, settings: ScheduleSettings, ev
 
   for (const ev of eventsForDay) {
     const evStart = timeToMinutes(ev.time);
-    const evEnd = evStart + (ev.durationMinutes || 60);
-    // add small buffer before & after event
-    blackoutWindows.push({ start: Math.max(0, evStart - 15), end: evEnd + 15 });
+    let evEnd = evStart + (ev.durationMinutes || 60);
+    if (ev.endTime) {
+      const parsedEnd = timeToMinutes(ev.endTime);
+      if (parsedEnd > evStart) {
+        evEnd = parsedEnd;
+      }
+    }
+    // Respect user-selected wind-down buffer before event (when to stop work) and recovery buffer after event (when work chunks resume)
+    const bufBefore = ev.bufferBeforeMinutes !== undefined ? Math.max(0, ev.bufferBeforeMinutes) : 15;
+    const bufAfter = ev.bufferAfterMinutes !== undefined ? Math.max(0, ev.bufferAfterMinutes) : 15;
+
+    blackoutWindows.push({
+      start: Math.max(0, evStart - bufBefore),
+      end: evEnd + bufAfter,
+    });
   }
 
   const slots: DaySlotTemplate[] = [];
@@ -292,9 +304,39 @@ export function recalculateSchedule(
     dayOffset++;
   }
 
+  // 3. Gracefully place overflowing chunks into "Unscheduled / Capacity Exceeded" holding shelf
+  for (const t of taskMeta) {
+    if (t.chunksScheduled < t.chunksNeeded) {
+      const missingCount = t.chunksNeeded - t.chunksScheduled;
+      const completedCount = preservedCompletedSlots.filter(s => s.workTaskId === t.task.id).length;
+      for (let c = 1; c <= missingCount; c++) {
+        const currentChunkNum = completedCount + t.chunksScheduled + c;
+        newSlots.push({
+          id: `slot-holding-${t.task.id}-${currentChunkNum}-${Math.random().toString(36).slice(2, 6)}`,
+          workTaskId: t.task.id,
+          workTitle: cleanTaskTitle(t.task.title),
+          category: t.task.category,
+          color: t.task.color,
+          date: 'unscheduled',
+          startTime: '--:--',
+          endTime: '--:--',
+          durationMinutes: settings.focusBlockMinutes,
+          isCompleted: false,
+          chunkNumber: currentChunkNum,
+          totalChunks: t.totalChunks,
+          isUnscheduled: true,
+          unscheduledReason: 'Capacity exceeded before deadline window',
+        });
+      }
+    }
+  }
+
   // Combine preserved completed slots and new slots, sorted by date and startTime
   const allSlots = [...preservedCompletedSlots, ...newSlots];
   allSlots.sort((a, b) => {
+    // Keep unscheduled items at the end
+    if (a.date === 'unscheduled') return 1;
+    if (b.date === 'unscheduled') return -1;
     if (a.date !== b.date) {
       return a.date.localeCompare(b.date);
     }

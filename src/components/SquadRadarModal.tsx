@@ -125,10 +125,28 @@ export const SquadRadarModal: React.FC<SquadRadarModalProps> = ({
     }
   };
 
+  const handleNativeShare = async () => {
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        await navigator.share({
+          title: 'cadence. squad rhythm',
+          text: shareText,
+          url: squadShareUrl,
+        });
+      } catch (err: any) {
+        if (err?.name !== 'AbortError') {
+          handleCopy();
+        }
+      }
+    } else {
+      handleCopy();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-xs overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-900/40 backdrop-blur-xs overflow-y-auto">
       <div 
-        className="bg-[#FAF8F5] rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-xl border border-stone-200/80 my-8 space-y-5 animate-in fade-in zoom-in-95 duration-150 text-stone-900"
+        className="bg-[#FAF8F5] rounded-3xl max-w-lg w-full p-4.5 sm:p-7 shadow-xl border border-stone-200/80 my-auto sm:my-8 max-h-[92vh] overflow-y-auto space-y-4 sm:space-y-5 animate-in fade-in zoom-in-95 duration-150 text-stone-900"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -137,13 +155,14 @@ export const SquadRadarModal: React.FC<SquadRadarModalProps> = ({
             <div className="text-xs font-serif italic text-stone-500">
               social harmony & study sync
             </div>
-            <h2 className="text-2xl font-serif font-normal tracking-tight text-stone-900">
+            <h2 className="text-xl sm:text-2xl font-serif font-normal tracking-tight text-stone-900">
               squad overlap radar.
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-200/50 transition-colors"
+            className="p-2 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-200/50 transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer"
+            aria-label="Close dialog"
           >
             <X className="w-5 h-5" />
           </button>
@@ -170,13 +189,24 @@ export const SquadRadarModal: React.FC<SquadRadarModalProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {/* Phone native share loop */}
+            {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
+              <button
+                onClick={handleNativeShare}
+                className="col-span-1 sm:col-span-3 flex items-center justify-center gap-2 px-4 py-3 bg-stone-900 text-white font-medium text-xs rounded-xl transition-all cursor-pointer active:scale-[0.98] min-h-[44px] shadow-xs"
+              >
+                <Share2 className="w-4 h-4 text-stone-200" />
+                <span>Share via Phone Apps (iMessage, WhatsApp, Telegram)</span>
+              </button>
+            )}
+
             {/* WhatsApp */}
             <button
               onClick={shareWhatsApp}
               className="flex items-center justify-center gap-2 px-3 py-3 bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 text-[#128C7E] font-medium text-xs rounded-xl transition-all cursor-pointer active:scale-[0.98] min-h-[44px]"
             >
               <MessageSquare className="w-4 h-4 text-[#25D366] shrink-0" />
-              <span>Share to WhatsApp</span>
+              <span>WhatsApp</span>
             </button>
 
             {/* Telegram */}

@@ -11,11 +11,11 @@ export const LegalLicenseModal: React.FC<LegalLicenseModalProps> = ({ isOpen, on
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-xs overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-900/40 backdrop-blur-xs overflow-y-auto"
       onClick={onClose}
     >
       <div 
-        className="bg-[#FAF8F5] rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-xl border border-stone-200/90 my-8 space-y-6 text-stone-900 animate-in fade-in zoom-in-95 duration-150"
+        className="bg-[#FAF8F5] rounded-3xl max-w-xl w-full p-4.5 sm:p-8 shadow-xl border border-stone-200/90 my-auto sm:my-8 max-h-[92vh] overflow-y-auto space-y-4 sm:space-y-6 text-stone-900 animate-in fade-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -31,7 +31,7 @@ export const LegalLicenseModal: React.FC<LegalLicenseModalProps> = ({ isOpen, on
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-200/50 transition-colors cursor-pointer"
+            className="p-2 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-200/50 transition-colors cursor-pointer min-h-[40px] min-w-[40px] flex items-center justify-center"
             aria-label="Close dialog"
           >
             <X className="w-5 h-5" />

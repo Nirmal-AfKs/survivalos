@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Play, 
   CheckCircle2, 
@@ -11,13 +11,17 @@ import {
   Sparkles,
   Moon,
   Sun,
-  Repeat
+  Repeat,
+  Zap,
+  AlertTriangle,
+  Shield
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ScheduledSlot, LifeEvent, WorkTask, ScheduleSettings, SquadSharePayload, SquadFocusBlock } from '../types';
 import { formatDateKey, addDays } from '../utils/scheduler';
-import { formatChunkTitle, formatRecurringDaysShort } from '../utils/format';
+import { formatChunkTitle, formatRecurringDaysShort, formatEventTimeSpan, formatBufferLabel } from '../utils/format';
 import { InboundSquadRadarCard } from './InboundSquadRadarCard';
+import { RebalanceConfirmModal } from './RebalanceConfirmModal';
 
 interface TodayViewProps {
   todayKey: string;
@@ -30,7 +34,7 @@ interface TodayViewProps {
   matchedSlotId?: string | null;
   onClearSample: () => void;
   onToggleSlotComplete: (slotId: string) => void;
-  onStartFocus: (slot: ScheduledSlot) => void;
+  onStartFocus: (slot: ScheduledSlot, mode?: 'focus' | 'ramp_up') => void;
   onRescheduleSlot: (slotId: string) => void;
   onOpenAdd: () => void;
   onOpenSquadRadar: () => void;
@@ -64,6 +68,9 @@ export const TodayView: React.FC<TodayViewProps> = ({
 }) => {
   const todayDateObj = new Date();
   const dayOfWeek = todayDateObj.getDay();
+
+  const [isRebalanceConfirmOpen, setIsRebalanceConfirmOpen] = useState(false);
+  const unscheduledSlots = slots.filter(s => s.isUnscheduled);
 
   const todaySlots = slots.filter(s => s.date === todayKey);
   const todayEvents = events.filter(e => {
@@ -167,7 +174,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <button
-            onClick={onRebalance}
+            onClick={() => setIsRebalanceConfirmOpen(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif text-stone-600 hover:text-stone-900 bg-white/80 border border-stone-200/80 rounded-xl hover:bg-stone-100 transition-colors shadow-2xs cursor-pointer"
             title="Recalculate slots peacefully"
           >
@@ -319,11 +326,20 @@ export const TodayView: React.FC<TodayViewProps> = ({
 
                 <div className="flex flex-wrap items-center gap-3 shrink-0">
                   <button
-                    onClick={() => onStartFocus(nextSlot)}
+                    onClick={() => onStartFocus(nextSlot, 'focus')}
                     className="inline-flex items-center gap-2 px-5 py-3 text-xs font-serif text-stone-900 bg-[#FAF8F5] hover:bg-white rounded-xl transition-all shadow-xs active:scale-[0.98] cursor-pointer min-h-[44px]"
                   >
                     <Play className="w-3.5 h-3.5 fill-current" />
                     <span>begin focus.</span>
+                  </button>
+
+                  <button
+                    onClick={() => onStartFocus(nextSlot, 'ramp_up')}
+                    className="inline-flex items-center gap-1.5 px-4 py-3 text-xs font-serif text-amber-300 hover:text-amber-200 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 rounded-xl transition-all cursor-pointer min-h-[44px] active:scale-[0.98]"
+                    title="Overcome task initiation friction with a gentle 2-minute micro-start"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-amber-400 fill-current" />
+                    <span>Stuck? 2-Min Ramp</span>
                   </button>
 
                   <button
@@ -342,7 +358,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span>postpone.</span>
                   </button>
-                  </div>
+                </div>
                 </div>
               </div>
             );
@@ -364,6 +380,58 @@ export const TodayView: React.FC<TodayViewProps> = ({
                 >
                   <span>🌅 peek at tomorrow's cadence.</span>
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* Accessible Re-Balance Schedule Action */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-stone-100/90 border border-stone-200/90 rounded-2xl shadow-2xs">
+            <div className="flex items-center gap-2.5 text-xs font-serif text-stone-600">
+              <RotateCcw className="w-4 h-4 text-stone-500 shrink-0" />
+              <span>Fell behind or schedule changed? Recalibrate with Earliest Deadline First protection.</span>
+            </div>
+            <button
+              onClick={() => setIsRebalanceConfirmOpen(true)}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-serif font-medium text-stone-800 bg-white hover:bg-stone-50 border border-stone-300 rounded-xl transition-all shadow-2xs hover:shadow-xs cursor-pointer min-h-[38px] shrink-0"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-stone-600" />
+              <span>Fell behind? Re-balance schedule</span>
+            </button>
+          </div>
+
+          {/* Unscheduled / Capacity Exceeded Holding Shelf with explicit warning badge */}
+          {unscheduledSlots.length > 0 && (
+            <div className="bg-amber-50/90 border border-amber-300/80 rounded-2xl p-4 sm:p-5 space-y-3 shadow-2xs animate-in fade-in duration-200">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-200/80 text-amber-900 border border-amber-300 text-[11px] font-serif font-semibold uppercase tracking-wider">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
+                    Unscheduled / Capacity Exceeded
+                  </span>
+                  <span className="text-xs font-serif text-amber-800 font-medium">
+                    {unscheduledSlots.length} chunk{unscheduledSlots.length > 1 ? 's' : ''} held
+                  </span>
+                </div>
+              </div>
+              <p className="text-xs font-serif text-amber-900/90 leading-relaxed">
+                Total estimated work exceeds your daylight rhythm windows before deadlines. These chunks are safely in holding so your immediate upcoming deadlines remain protected:
+              </p>
+              <div className="space-y-2 pt-1">
+                {unscheduledSlots.map((us) => (
+                  <div key={us.id} className="flex items-center justify-between p-3 bg-white/95 border border-amber-200 rounded-xl text-xs font-serif shadow-2xs">
+                    <div className="space-y-0.5">
+                      <div className="font-medium text-stone-900">
+                        {formatChunkTitle(us.workTitle, us.chunkNumber, us.totalChunks)}
+                      </div>
+                      <div className="text-[11px] text-amber-700 font-sans">
+                        ⚠️ {us.unscheduledReason || 'Capacity exceeded before deadline window'} · {us.durationMinutes}m duration
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-[10px] font-mono font-semibold tracking-wide border border-amber-200">
+                      HOLDING
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -393,9 +461,9 @@ export const TodayView: React.FC<TodayViewProps> = ({
                     >
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div className="space-y-0.5">
-                          <div className="flex items-center gap-2 text-xs font-serif text-stone-500">
+                          <div className="flex flex-wrap items-center gap-2 text-xs font-serif text-stone-500">
                             <span className="font-semibold text-stone-900 font-mono tabular-nums">
-                              {event.time}
+                              {formatEventTimeSpan(event)}
                             </span>
                             <span aria-hidden="true">·</span>
                             <span>{event.durationMinutes}m</span>
@@ -424,6 +492,10 @@ export const TodayView: React.FC<TodayViewProps> = ({
                                 commitment
                               </span>
                             )}
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-serif bg-amber-100/70 text-amber-900 border border-amber-200/70">
+                              <Shield className="w-2.5 h-2.5 text-amber-700" />
+                              pause {formatBufferLabel(event.bufferBeforeMinutes ?? 15)} before · resume {formatBufferLabel(event.bufferAfterMinutes ?? 15)} after
+                            </span>
                           </div>
                         </div>
 
@@ -480,7 +552,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
                     <div className="flex items-start sm:items-center gap-4">
                       <button
                         onClick={() => handleCompleteWithCelebration(slot.id)}
-                        className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all cursor-pointer shrink-0 mt-0.5 sm:mt-0 ${
+                        className={`w-8 h-8 sm:w-7 sm:h-7 rounded-lg border flex items-center justify-center transition-all active:scale-90 cursor-pointer shrink-0 mt-0.5 sm:mt-0 ${
                           slot.isCompleted
                             ? 'bg-stone-900 border-stone-900 text-white'
                             : isMatchedSlot
@@ -489,7 +561,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
                         }`}
                         aria-label="Toggle completed"
                       >
-                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        <Check className="w-4 h-4 stroke-[3]" />
                       </button>
 
                       <div className="space-y-0.5">
@@ -529,7 +601,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
                     {!slot.isCompleted && (
                       <button
                         onClick={() => onStartFocus(slot)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif text-stone-900 bg-stone-100 hover:bg-stone-200 rounded-lg transition-colors cursor-pointer min-h-[36px]"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-serif text-stone-900 bg-stone-100 hover:bg-stone-200 active:scale-95 rounded-lg transition-all cursor-pointer min-h-[40px]"
                       >
                         <Play className="w-3 h-3 fill-current" />
                         <span>focus.</span>
@@ -539,7 +611,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
                     {!slot.isCompleted && (
                       <button
                         onClick={() => onRescheduleSlot(slot.id)}
-                        className="px-2.5 py-1.5 text-xs font-serif text-stone-400 hover:text-stone-700 rounded-lg hover:bg-stone-100 transition-colors cursor-pointer min-h-[36px]"
+                        className="px-2.5 py-2 text-xs font-serif text-stone-400 hover:text-stone-700 active:scale-95 rounded-lg hover:bg-stone-100 transition-all cursor-pointer min-h-[40px]"
                         title="Move to next open slot"
                       >
                         postpone
@@ -583,14 +655,14 @@ export const TodayView: React.FC<TodayViewProps> = ({
             {todayEvents.map(event => (
               <div key={event.id} className="bg-white/80 border border-stone-200/80 rounded-2xl p-5 space-y-4 shadow-2xs">
                 <div>
-                  <div className="flex items-center gap-2 text-xs font-serif text-stone-500">
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-serif text-stone-500">
                     {event.recurringDays && event.recurringDays.length > 0 && (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-serif bg-stone-100 text-stone-800 border border-stone-200/90 font-medium">
                         <Repeat className="w-2.5 h-2.5 text-stone-600" />
                         Every {formatRecurringDaysShort(event.recurringDays)}
                       </span>
                     )}
-                    <span className="font-medium text-stone-900">{event.time}</span>
+                    <span className="font-semibold text-stone-900 font-mono tabular-nums">{formatEventTimeSpan(event)}</span>
                     <span aria-hidden="true">·</span>
                     <span>{event.durationMinutes} min</span>
                     {event.location && (
@@ -600,7 +672,13 @@ export const TodayView: React.FC<TodayViewProps> = ({
                       </>
                     )}
                   </div>
-                  <h4 className="text-base font-serif font-medium text-stone-900 mt-1">{event.title}</h4>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <h4 className="text-base font-serif font-medium text-stone-900">{event.title}</h4>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-serif bg-amber-50 text-amber-900 border border-amber-200/80">
+                      <Shield className="w-2.5 h-2.5 text-amber-700" />
+                      buffer: -{formatBufferLabel(event.bufferBeforeMinutes ?? 15)} / +{formatBufferLabel(event.bufferAfterMinutes ?? 15)}
+                    </span>
+                  </div>
                 </div>
 
                 {event.whatToBring && event.whatToBring.length > 0 && (
@@ -636,6 +714,13 @@ export const TodayView: React.FC<TodayViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Rebalance Confirmation Modal */}
+      <RebalanceConfirmModal
+        isOpen={isRebalanceConfirmOpen}
+        onClose={() => setIsRebalanceConfirmOpen(false)}
+        onConfirm={onRebalance}
+      />
     </div>
   );
 };

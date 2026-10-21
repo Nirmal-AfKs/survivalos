@@ -14,21 +14,31 @@ import {
   Waves, 
   Plus, 
   Minus,
-  Quote
+  Quote,
+  Zap,
+  Eye
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ScheduledSlot } from '../types';
-import { playGentleBell, startAmbientSound, stopAmbientSound } from '../utils/audio';
-import { formatChunkTitle } from '../utils/format';
+import { 
+  playGentleBell, 
+  startAmbientSound, 
+  stopAmbientSound, 
+  getMasterVolume, 
+  setMasterVolume, 
+  getMasterSoundscape, 
+  setMasterSoundscape,
+  NatureSoundType 
+} from '../utils/audio';
+import { formatChunkTitle, cleanTaskTitle } from '../utils/format';
 
 interface FocusTimerModalProps {
   slot: ScheduledSlot | null;
   onClose: () => void;
   onCompleteSlot: (slotId: string) => void;
   breakDurationMinutes: number;
+  initialMode?: 'focus' | 'ramp_up' | 'break';
 }
-
-type AmbientType = 'none' | 'bowl' | 'rain' | 'waves';
 
 const MANTRAS = [
   'Do one thing at a time, with total devotion and quiet presence.',
@@ -44,35 +54,86 @@ export const FocusTimerModal: React.FC<FocusTimerModalProps> = ({
   onClose,
   onCompleteSlot,
   breakDurationMinutes,
+  initialMode = 'focus',
 }) => {
-  const initialFocusSeconds = (slot?.durationMinutes ?? 45) * 60;
-  const initialBreakSeconds = breakDurationMinutes * 60;
+  const isRampUpInitial = initialMode === 'ramp_up';
+  const initialDurationSeconds = isRampUpInitial 
+    ? 120 
+    : (slot?.durationMinutes ?? 30) * 60;
 
-  const [mode, setMode] = useState<'focus' | 'break'>('focus');
-  const [totalSeconds, setTotalSeconds] = useState(initialFocusSeconds);
-  const [secondsRemaining, setSecondsRemaining] = useState(initialFocusSeconds);
+  const [mode, setMode] = useState<'focus' | 'break' | 'ramp_up'>(initialMode);
+  const [totalSeconds, setTotalSeconds] = useState(initialDurationSeconds);
+  const [secondsRemaining, setSecondsRemaining] = useState(initialDurationSeconds);
   const [isActive, setIsActive] = useState(true);
-  const [ambientSound, setAmbientSound] = useState<AmbientType>('none');
+  const [ambientSound, setAmbientSound] = useState<NatureSoundType>(() => getMasterSoundscape());
+  const [masterVolume, setMasterVolState] = useState<number>(() => getMasterVolume());
   const [mantraIndex, setMantraIndex] = useState(0);
+  const [hasWakeLock, setHasWakeLock] = useState(false);
 
-  const displayTitle = formatChunkTitle(slot?.workTitle, slot?.chunkNumber, slot?.totalChunks);
+  const baseTitle = cleanTaskTitle(slot?.workTitle);
+  const displayTitle = (slot?.totalChunks && slot.totalChunks > 1 && slot.chunkNumber)
+    ? `${baseTitle} • Part ${slot.chunkNumber} of ${slot.totalChunks}`
+    : (baseTitle || 'Focus Session');
 
-  // Track ambient stop function
-  const stopAmbientRef = useRef<(() => void) | null>(null);
+  const stopAmbientRef = useRef<((fadeTime?: number) => void) | null>(null);
+  const wakeLockRef = useRef<any>(null);
 
-  // Initialize timer on slot change
+  // 1. Request Screen WakeLock API so display stays awake
+  useEffect(() => {
+    let released = false;
+
+    async function requestWakeLock() {
+      if (typeof navigator !== 'undefined' && 'wakeLock' in navigator && (navigator as any).wakeLock) {
+        try {
+          const lock = await (navigator as any).wakeLock.request('screen');
+          if (!released) {
+            wakeLockRef.current = lock;
+            setHasWakeLock(true);
+            lock.addEventListener('release', () => {
+              setHasWakeLock(false);
+            });
+          } else {
+            lock.release();
+          }
+        } catch (err) {
+          console.debug('Screen WakeLock request skipped or not granted:', err);
+        }
+      }
+    }
+
+    requestWakeLock();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && !wakeLockRef.current && !released) {
+        requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      released = true;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (wakeLockRef.current) {
+        try {
+          wakeLockRef.current.release();
+        } catch {}
+        wakeLockRef.current = null;
+      }
+    };
+  }, []);
+
+  // Initialize timer on slot or initialMode change
   useEffect(() => {
     if (!slot) return;
 
     try {
-      playGentleBell('focus_start');
-    } catch {
-      // browser audio restrictions
-    }
-    const secs = slot.durationMinutes * 60;
+      playGentleBell(isRampUpInitial ? 'focus_start' : 'focus_start');
+    } catch {}
+
+    const secs = isRampUpInitial ? 120 : (slot.durationMinutes || 30) * 60;
     setTotalSeconds(secs);
     setSecondsRemaining(secs);
-    setMode('focus');
+    setMode(initialMode);
     setIsActive(true);
     setMantraIndex(Math.floor(Math.random() * MANTRAS.length));
 
@@ -83,27 +144,27 @@ export const FocusTimerModal: React.FC<FocusTimerModalProps> = ({
         stopAmbientRef.current = null;
       }
     };
-  }, [slot?.id]);
+  }, [slot?.id, initialMode]);
 
-  // Handle ambient sound changes
+  // Ambient sound handler: runs strictly while focus/ramp_up timer is active
   useEffect(() => {
     if (stopAmbientRef.current) {
-      stopAmbientRef.current();
+      stopAmbientRef.current(0.4);
       stopAmbientRef.current = null;
     }
 
-    if (isActive && ambientSound !== 'none') {
+    if (isActive && mode !== 'break' && ambientSound !== 'none') {
       stopAmbientRef.current = startAmbientSound(ambientSound);
     } else {
-      stopAmbientSound();
+      stopAmbientSound(0.6);
     }
 
     return () => {
-      stopAmbientSound();
+      stopAmbientSound(0.4);
     };
-  }, [ambientSound, isActive]);
+  }, [ambientSound, isActive, mode]);
 
-  // Timer tick
+  // Timer Tick
   useEffect(() => {
     let interval: number | null = null;
     if (isActive && secondsRemaining > 0) {
@@ -111,21 +172,41 @@ export const FocusTimerModal: React.FC<FocusTimerModalProps> = ({
         setSecondsRemaining(prev => Math.max(0, prev - 1));
       }, 1000);
     } else if (isActive && secondsRemaining === 0) {
-      if (mode === 'focus') {
+      if (mode === 'ramp_up') {
+        // When 2-minute ramp finishes: gentle chime and automatically launch full sprint
+        playGentleBell('focus_start');
+        setMode('focus');
+        const sprintSecs = (slot?.durationMinutes || 30) * 60;
+        setTotalSeconds(sprintSecs);
+        setSecondsRemaining(sprintSecs);
+      } else if (mode === 'focus') {
+        // When focus sprint finishes: smoothly fade out ambient sound, chime & transition into mindful rest break
+        stopAmbientSound(0.8);
         playGentleBell('break_start');
         setMode('break');
         const breakSecs = breakDurationMinutes * 60;
         setTotalSeconds(breakSecs);
         setSecondsRemaining(breakSecs);
       } else {
+        // Break finished: chime, release wakeLock, and return to dashboard
+        stopAmbientSound(0.4);
         playGentleBell('complete');
         setIsActive(false);
+        if (wakeLockRef.current) {
+          try {
+            wakeLockRef.current.release();
+          } catch {}
+          wakeLockRef.current = null;
+        }
+        setTimeout(() => {
+          onClose();
+        }, 1500);
       }
     }
     return () => {
       if (interval !== null) clearInterval(interval);
     };
-  }, [isActive, secondsRemaining, mode, breakDurationMinutes]);
+  }, [isActive, secondsRemaining, mode, breakDurationMinutes, slot?.durationMinutes, onClose]);
 
   const toggleActive = () => {
     setIsActive(!isActive);
@@ -133,42 +214,36 @@ export const FocusTimerModal: React.FC<FocusTimerModalProps> = ({
 
   const handleReset = () => {
     setIsActive(false);
-    const resetTarget = mode === 'focus' ? (slot?.durationMinutes || 45) * 60 : breakDurationMinutes * 60;
+    const resetTarget = mode === 'ramp_up' 
+      ? 120 
+      : mode === 'focus' 
+      ? (slot?.durationMinutes || 30) * 60 
+      : breakDurationMinutes * 60;
     setTotalSeconds(resetTarget);
     setSecondsRemaining(resetTarget);
   };
 
-  const handleAddFiveMinutes = () => {
-    setTotalSeconds(prev => prev + 300);
-    setSecondsRemaining(prev => prev + 300);
-  };
-
-  const handleSubtractFiveMinutes = () => {
-    if (secondsRemaining > 300) {
-      setTotalSeconds(prev => Math.max(60, prev - 300));
-      setSecondsRemaining(prev => Math.max(60, prev - 300));
-    }
-  };
-
-  const handleSwitchToBreak = () => {
-    playGentleBell('break_start');
-    setMode('break');
-    const breakSecs = breakDurationMinutes * 60;
-    setTotalSeconds(breakSecs);
-    setSecondsRemaining(breakSecs);
-    setIsActive(true);
-  };
-
-  const handleSwitchToFocus = () => {
+  const handleJumpToFullSprint = () => {
     playGentleBell('focus_start');
     setMode('focus');
-    const focusSecs = (slot?.durationMinutes || 45) * 60;
-    setTotalSeconds(focusSecs);
-    setSecondsRemaining(focusSecs);
+    const sprintSecs = (slot?.durationMinutes || 30) * 60;
+    setTotalSeconds(sprintSecs);
+    setSecondsRemaining(sprintSecs);
     setIsActive(true);
   };
 
-  const handleCompleteNow = () => {
+  const handleVolumeChange = (newVol: number) => {
+    const clamped = Math.max(0, Math.min(1, newVol));
+    setMasterVolState(clamped);
+    setMasterVolume(clamped);
+  };
+
+  const handleSelectSoundscape = (type: NatureSoundType) => {
+    setAmbientSound(type);
+    setMasterSoundscape(type);
+  };
+
+  const handleCompleteChunk = () => {
     stopAmbientSound();
     try {
       confetti({
@@ -177,16 +252,27 @@ export const FocusTimerModal: React.FC<FocusTimerModalProps> = ({
         origin: { y: 0.6 },
         colors: ['#FAF8F5', '#10b981', '#f59e0b', '#6366f1'],
       });
-    } catch {
-      // ignore
-    }
+    } catch {}
     playGentleBell('complete');
+    if (wakeLockRef.current) {
+      try {
+        wakeLockRef.current.release();
+      } catch {}
+      wakeLockRef.current = null;
+    }
     if (slot) onCompleteSlot(slot.id);
     onClose();
   };
 
-  const handleCycleMantra = () => {
-    setMantraIndex((mantraIndex + 1) % MANTRAS.length);
+  const handleExitZenMode = () => {
+    stopAmbientSound();
+    if (wakeLockRef.current) {
+      try {
+        wakeLockRef.current.release();
+      } catch {}
+      wakeLockRef.current = null;
+    }
+    onClose();
   };
 
   const progressRatio = totalSeconds > 0 ? (totalSeconds - secondsRemaining) / totalSeconds : 0;
@@ -195,80 +281,100 @@ export const FocusTimerModal: React.FC<FocusTimerModalProps> = ({
   const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
   // Dial geometry
-  const radius = 104;
+  const radius = 110;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - progressRatio * circumference;
 
-  // Angle for the glowing orbital lead bead
   const currentAngle = progressRatio * 360 - 90;
-  const beadX = 130 + radius * Math.cos((currentAngle * Math.PI) / 180);
-  const beadY = 130 + radius * Math.sin((currentAngle * Math.PI) / 180);
+  const beadX = 140 + radius * Math.cos((currentAngle * Math.PI) / 180);
+  const beadY = 140 + radius * Math.sin((currentAngle * Math.PI) / 180);
 
   if (!slot) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/85 backdrop-blur-lg overflow-y-auto selection:bg-stone-800">
+    <div className="fixed inset-0 z-50 bg-[#121110] text-[#FAF8F5] flex flex-col justify-between p-4 sm:p-10 pb-8 sm:pb-10 select-none overflow-y-auto animate-in fade-in duration-300">
+      {/* Background ambient gentle illumination */}
       <div 
-        className="bg-[#181615] border border-stone-800/90 text-[#FAF8F5] rounded-3xl max-w-lg w-full p-6 sm:p-9 shadow-2xl relative flex flex-col items-center text-center animate-in fade-in zoom-in-95 duration-200 overflow-hidden"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Ambient organic breathing glow aura */}
-        <div 
-          className={`absolute inset-0 pointer-events-none transition-all duration-1000 ${
-            mode === 'focus' 
-              ? 'bg-[radial-gradient(ellipse_at_50%_40%,rgba(16,185,129,0.14),transparent_70%)]' 
-              : 'bg-[radial-gradient(ellipse_at_50%_40%,rgba(245,158,11,0.14),transparent_70%)]'
-          } ${isActive ? 'animate-pulse' : 'opacity-40'}`} 
-        />
+        aria-hidden="true"
+        className={`absolute inset-0 pointer-events-none transition-all duration-1000 ${
+          mode === 'ramp_up'
+            ? 'bg-[radial-gradient(ellipse_at_50%_35%,rgba(245,158,11,0.12),transparent_70%)]'
+            : mode === 'focus' 
+            ? 'bg-[radial-gradient(ellipse_at_50%_35%,rgba(16,185,129,0.12),transparent_70%)]' 
+            : 'bg-[radial-gradient(ellipse_at_50%_35%,rgba(59,130,246,0.12),transparent_70%)]'
+        } ${isActive ? 'animate-pulse' : 'opacity-40'}`} 
+      />
 
-        {/* Close Button */}
-        <button
-          onClick={() => {
-            stopAmbientSound();
-            onClose();
-          }}
-          className="absolute top-5 right-5 p-2 text-stone-400 hover:text-white rounded-full hover:bg-stone-800/80 transition-colors z-20 cursor-pointer"
-          title="Exit Focus Mode"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
-        {/* State Badge & Title */}
-        <div className="space-y-2 relative z-10 max-w-md">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-serif bg-stone-800/80 border border-stone-700/60 shadow-2xs">
-            {mode === 'focus' ? (
-              <>
+      {/* TOP ZONE: Zen Desk-Clock Status Bar & Task Details */}
+      <div className="relative z-10 w-full max-w-4xl mx-auto flex items-start justify-between gap-4 pb-4">
+        <div className="space-y-1.5 text-left">
+          <div className="flex flex-wrap items-center gap-2 text-xs font-serif">
+            {mode === 'ramp_up' ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium">
+                <Zap className="w-3 h-3 text-amber-400 fill-current" />
+                <span>2-minute task-initiation micro-sprint</span>
+              </span>
+            ) : mode === 'focus' ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span className="text-emerald-300 font-medium tracking-wide">cadence focus session.</span>
-              </>
+                <span>zen desk-clock focus mode</span>
+              </span>
             ) : (
-              <>
-                <Coffee className="w-3.5 h-3.5 text-amber-400" />
-                <span className="text-amber-300 font-medium tracking-wide">mindful rest & restore.</span>
-              </>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-medium">
+                <Coffee className="w-3 h-3 text-blue-400" />
+                <span>mindful rest & restore</span>
+              </span>
+            )}
+
+            {hasWakeLock && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-stone-900 border border-stone-800 text-[11px] text-stone-400">
+                <Eye className="w-3 h-3 text-stone-400" />
+                <span className="hidden sm:inline">screen kept awake</span>
+              </span>
             )}
           </div>
 
-          <h2 className="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-white px-2">
+          <h1 className="text-xl sm:text-3xl font-serif font-normal tracking-tight text-white max-w-2xl">
             {displayTitle}
-          </h2>
+          </h1>
 
-          <div className="flex items-center justify-center gap-2 text-xs text-stone-400 font-serif">
+          <div className="flex items-center gap-2 text-xs text-stone-400 font-serif">
             <span>{slot.category.toLowerCase()}.</span>
             <span aria-hidden="true">·</span>
-            <span>{slot.durationMinutes}m sprint</span>
-            <span aria-hidden="true">·</span>
             <span>chunk {slot.chunkNumber} of {slot.totalChunks}</span>
+            <span aria-hidden="true">·</span>
+            <span>{slot.durationMinutes}m sprint duration</span>
           </div>
         </div>
 
-        {/* Serene Circular Progress Dial */}
-        <div className="relative w-68 h-68 sm:w-72 sm:h-72 flex items-center justify-center my-4 relative z-10">
+        {/* Minimal Zen Exit */}
+        <button
+          onClick={handleExitZenMode}
+          className="p-2.5 text-stone-400 hover:text-white rounded-2xl bg-stone-900/60 hover:bg-stone-800/80 border border-stone-800 transition-colors cursor-pointer shrink-0"
+          title="Exit Zen Mode"
+          aria-label="Exit Zen Mode"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* CENTER ZONE: Prominent Countdown Timer & Smooth Visualization */}
+      <div className="relative z-10 my-auto flex flex-col items-center justify-center text-center py-4 sm:py-6">
+        {/* 2-Minute Ramp-Up Behavioral Prompt Banner */}
+        {mode === 'ramp_up' && (
+          <div className="max-w-md mx-auto mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs sm:text-sm font-serif text-amber-200/90 leading-relaxed animate-in fade-in zoom-in-95 duration-200">
+            <p className="font-medium text-amber-300 mb-1">🌱 Micro-Initiation Rule:</p>
+            <p>&quot;Just open your notes and read/write 1 sentence. You can stop when the timer reaches zero.&quot;</p>
+          </div>
+        )}
+
+        {/* Circular Smooth Progress Visualization */}
+        <div className="relative w-72 h-72 sm:w-84 sm:h-84 flex items-center justify-center">
           <svg className="w-full h-full transform -rotate-90">
-            {/* Soft background track */}
+            {/* Background circular track */}
             <circle
-              cx="130"
-              cy="130"
+              cx="140"
+              cy="140"
               r={radius}
               stroke="currentColor"
               strokeWidth="4"
@@ -276,30 +382,34 @@ export const FocusTimerModal: React.FC<FocusTimerModalProps> = ({
               fill="transparent"
             />
 
-            {/* Subtle orbital dashed guideline */}
+            {/* Subtle dashed aesthetic guide */}
             <circle
-              cx="130"
-              cy="130"
+              cx="140"
+              cy="140"
               r={radius + 12}
               stroke="currentColor"
               strokeWidth="1"
               strokeDasharray="3 6"
-              className="text-stone-800/50"
+              className="text-stone-800/40"
               fill="transparent"
             />
 
             {/* Active glowing progress track */}
             <circle
-              cx="130"
-              cy="130"
+              cx="140"
+              cy="140"
               r={radius}
               stroke="currentColor"
-              strokeWidth="6"
+              strokeWidth="7"
               strokeDasharray={circumference}
               strokeDashoffset={strokeDashoffset}
               strokeLinecap="round"
               className={`transition-all duration-1000 ${
-                mode === 'focus' ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]' : 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]'
+                mode === 'ramp_up'
+                  ? 'text-amber-400 drop-shadow-[0_0_12px_rgba(251,191,36,0.6)]'
+                  : mode === 'focus' 
+                  ? 'text-emerald-400 drop-shadow-[0_0_12px_rgba(52,211,153,0.6)]' 
+                  : 'text-blue-400 drop-shadow-[0_0_12px_rgba(96,165,250,0.6)]'
               }`}
               fill="transparent"
             />
@@ -309,26 +419,34 @@ export const FocusTimerModal: React.FC<FocusTimerModalProps> = ({
               <circle
                 cx={beadX}
                 cy={beadY}
-                r="5"
-                className={mode === 'focus' ? 'fill-emerald-300 drop-shadow-[0_0_6px_#34d399]' : 'fill-amber-300 drop-shadow-[0_0_6px_#fbbf24]'}
+                r="6"
+                className={
+                  mode === 'ramp_up'
+                    ? 'fill-amber-300 drop-shadow-[0_0_8px_#fbbf24]'
+                    : mode === 'focus'
+                    ? 'fill-emerald-300 drop-shadow-[0_0_8px_#34d399]'
+                    : 'fill-blue-300 drop-shadow-[0_0_8px_#60a5fa]'
+                }
               />
             )}
           </svg>
 
-          {/* Center Digital & Pacing Readout */}
+          {/* Prominent Desk-Clock Digital Timer */}
           <div className="absolute flex flex-col items-center">
-            <span className="text-5xl sm:text-6xl font-serif font-light tracking-tight tabular-nums text-white">
+            <span className="text-6xl sm:text-7xl font-serif font-light tracking-tight tabular-nums text-white">
               {formattedTime}
             </span>
-            <div className="flex items-center gap-1.5 mt-2 text-[11px] font-serif tracking-widest uppercase text-stone-400">
+            <div className="flex items-center gap-1.5 mt-2.5 text-xs font-serif tracking-widest uppercase text-stone-400">
               {isActive ? (
                 <>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  <span>{mode === 'focus' ? 'in flow.' : 'exhale gently.'}</span>
+                  <span className={`w-2 h-2 rounded-full ${
+                    mode === 'ramp_up' ? 'bg-amber-400' : mode === 'focus' ? 'bg-emerald-400' : 'bg-blue-400'
+                  }`} />
+                  <span>{mode === 'ramp_up' ? 'ramping up.' : mode === 'focus' ? 'in flow.' : 'rest peacefully.'}</span>
                 </>
               ) : (
                 <>
-                  <span className="w-1.5 h-1.5 rounded-full bg-stone-500" />
+                  <span className="w-2 h-2 rounded-full bg-stone-500" />
                   <span>paused.</span>
                 </>
               )}
@@ -336,152 +454,147 @@ export const FocusTimerModal: React.FC<FocusTimerModalProps> = ({
           </div>
         </div>
 
-        {/* Ambient Soundscapes Bar (Generative Web Audio) */}
-        <div className="w-full bg-stone-900/70 border border-stone-800/70 rounded-2xl p-2.5 flex items-center justify-between gap-2 relative z-10 text-xs font-serif">
-          <span className="text-stone-400 flex items-center gap-1.5 pl-1.5">
-            <Volume2 className="w-3.5 h-3.5 text-stone-400" />
-            <span className="hidden sm:inline">ambient:</span>
-          </span>
-
-          <div className="flex items-center gap-1">
+        {/* 2-Minute Ramp-Up: Jump to Full Sprint Early */}
+        {mode === 'ramp_up' && (
+          <div className="pt-5">
             <button
-              onClick={() => setAmbientSound('bowl')}
-              className={`px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 transition-all cursor-pointer ${
-                ambientSound === 'bowl'
-                  ? 'bg-emerald-950 text-emerald-200 border border-emerald-800/60 font-semibold'
-                  : 'text-stone-400 hover:text-white hover:bg-stone-800'
-              }`}
-              title="432Hz Tibetan Singing Bowl Drone"
+              onClick={handleJumpToFullSprint}
+              className="inline-flex items-center gap-2 px-6 py-3 text-xs sm:text-sm font-serif font-medium text-stone-900 bg-amber-400 hover:bg-amber-300 rounded-2xl transition-all shadow-md active:scale-95 cursor-pointer"
             >
-              <Wind className="w-3 h-3" />
-              <span>singing bowl</span>
+              <Zap className="w-4 h-4 fill-current" />
+              <span>Jump to Full Sprint (Momentum Kicked In)</span>
             </button>
+          </div>
+        )}
 
+        {/* Procedural Nature Soundscape Generator & Master Volume Control (0 KB Downloads) */}
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3 max-w-2xl mx-auto">
+          {/* Subtle audio selector: [Mute] [Ocean Waves] [Rainfall] [Brook Water] */}
+          <div className="p-1 bg-stone-900/90 border border-stone-800/90 rounded-2xl sm:rounded-full inline-flex flex-wrap items-center justify-center gap-1 shadow-inner max-w-full">
             <button
-              onClick={() => setAmbientSound('rain')}
-              className={`px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 transition-all cursor-pointer ${
-                ambientSound === 'rain'
-                  ? 'bg-emerald-950 text-emerald-200 border border-emerald-800/60 font-semibold'
-                  : 'text-stone-400 hover:text-white hover:bg-stone-800'
-              }`}
-              title="Soft gentle rainfall pink noise"
-            >
-              <CloudRain className="w-3 h-3" />
-              <span>rain</span>
-            </button>
-
-            <button
-              onClick={() => setAmbientSound('waves')}
-              className={`px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 transition-all cursor-pointer ${
-                ambientSound === 'waves'
-                  ? 'bg-emerald-950 text-emerald-200 border border-emerald-800/60 font-semibold'
-                  : 'text-stone-400 hover:text-white hover:bg-stone-800'
-              }`}
-              title="Ocean breath wave cycles"
-            >
-              <Waves className="w-3 h-3" />
-              <span>waves</span>
-            </button>
-
-            <button
-              onClick={() => setAmbientSound('none')}
-              className={`p-1.5 rounded-xl transition-all cursor-pointer ${
+              onClick={() => handleSelectSoundscape('none')}
+              className={`px-3 py-1.5 rounded-xl sm:rounded-full transition-all text-xs font-serif cursor-pointer ${
                 ambientSound === 'none'
-                  ? 'text-white bg-stone-800'
-                  : 'text-stone-500 hover:text-stone-300'
+                  ? 'bg-stone-800 text-white font-medium border border-stone-700 shadow-2xs'
+                  : 'text-stone-400 hover:text-stone-200'
               }`}
-              title="Mute ambient audio"
             >
-              <VolumeX className="w-3.5 h-3.5" />
+              Mute
             </button>
+            <button
+              onClick={() => handleSelectSoundscape('waves')}
+              className={`px-3 py-1.5 rounded-xl sm:rounded-full transition-all text-xs font-serif cursor-pointer inline-flex items-center gap-1.5 ${
+                ambientSound === 'waves'
+                  ? 'bg-emerald-950 text-emerald-200 border border-emerald-800/70 font-semibold shadow-2xs'
+                  : 'text-stone-400 hover:text-stone-200'
+              }`}
+            >
+              <Waves className="w-3 h-3 text-emerald-400" />
+              <span>Ocean Waves</span>
+            </button>
+            <button
+              onClick={() => handleSelectSoundscape('rain')}
+              className={`px-3 py-1.5 rounded-xl sm:rounded-full transition-all text-xs font-serif cursor-pointer inline-flex items-center gap-1.5 ${
+                ambientSound === 'rain'
+                  ? 'bg-emerald-950 text-emerald-200 border border-emerald-800/70 font-semibold shadow-2xs'
+                  : 'text-stone-400 hover:text-stone-200'
+              }`}
+            >
+              <CloudRain className="w-3 h-3 text-emerald-400" />
+              <span>Rainfall</span>
+            </button>
+            <button
+              onClick={() => handleSelectSoundscape('brook')}
+              className={`px-3 py-1.5 rounded-xl sm:rounded-full transition-all text-xs font-serif cursor-pointer inline-flex items-center gap-1.5 ${
+                ambientSound === 'brook'
+                  ? 'bg-emerald-950 text-emerald-200 border border-emerald-800/70 font-semibold shadow-2xs'
+                  : 'text-stone-400 hover:text-stone-200'
+              }`}
+            >
+              <Wind className="w-3 h-3 text-emerald-400" />
+              <span>Brook Water</span>
+            </button>
+          </div>
+
+          {/* Master Volume Slider (0% to 100%, default 75%) */}
+          <div className="flex items-center gap-2 text-xs font-serif text-stone-300 bg-stone-900/90 border border-stone-800/90 px-3.5 py-1.5 rounded-2xl sm:rounded-full shadow-inner">
+            <button
+              onClick={() => handleVolumeChange(masterVolume > 0 ? 0 : 0.75)}
+              className="text-stone-400 hover:text-stone-200 transition-colors cursor-pointer"
+              title={masterVolume === 0 ? 'Unmute' : 'Mute master audio'}
+              aria-label={masterVolume === 0 ? 'Unmute' : 'Mute master audio'}
+            >
+              {masterVolume === 0 ? (
+                <VolumeX className="w-3.5 h-3.5 text-stone-500" />
+              ) : (
+                <Volume2 className="w-3.5 h-3.5 text-stone-300" />
+              )}
+            </button>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={masterVolume}
+              onChange={e => handleVolumeChange(parseFloat(e.target.value))}
+              className="w-20 sm:w-24 h-1.5 bg-stone-800 accent-emerald-500 rounded-lg cursor-pointer"
+              title={`Master Volume: ${Math.round(masterVolume * 100)}%`}
+              aria-label="Master volume slider"
+            />
+            <span className="font-mono text-[11px] text-stone-400 w-8 text-right tabular-nums">
+              {Math.round(masterVolume * 100)}%
+            </span>
           </div>
         </div>
 
-        {/* Primary Controls */}
-        <div className="flex items-center justify-center gap-3 pt-4 w-full relative z-10">
-          <button
-            onClick={handleReset}
-            className="p-3.5 rounded-2xl bg-stone-900 border border-stone-800 text-stone-400 hover:text-white hover:bg-stone-800 transition-colors cursor-pointer"
-            title="Reset timer"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
+        {/* Grounding Mantra */}
+        <div 
+          onClick={() => setMantraIndex((mantraIndex + 1) % MANTRAS.length)}
+          className="mt-4 cursor-pointer group max-w-md mx-auto"
+          title="Tap to cycle mantra"
+        >
+          <p className="text-xs font-serif italic text-stone-400 group-hover:text-stone-300 transition-colors">
+            &quot;{MANTRAS[mantraIndex]}&quot;
+          </p>
+        </div>
+      </div>
 
-          <button
-            onClick={handleSubtractFiveMinutes}
-            className="p-3.5 rounded-2xl bg-stone-900 border border-stone-800 text-stone-400 hover:text-white hover:bg-stone-800 transition-colors cursor-pointer flex items-center justify-center"
-            title="Trim 5 minutes"
-          >
-            <Minus className="w-4 h-4" />
-          </button>
-
+      {/* BOTTOM ZONE: Two Primary Buttons ("Complete Chunk" and "Exit Zen Mode") + Controls */}
+      <div className="relative z-10 w-full max-w-4xl mx-auto pt-6 border-t border-stone-800/80 flex flex-col sm:flex-row items-center justify-between gap-4">
+        {/* Secondary controls: Pause/Resume, Reset */}
+        <div className="flex items-center gap-2 order-2 sm:order-1">
           <button
             onClick={toggleActive}
-            className="px-7 py-3.5 rounded-2xl bg-[#FAF8F5] text-stone-950 font-serif font-medium text-sm flex items-center gap-2 hover:bg-white transition-all shadow-md active:scale-95 cursor-pointer min-h-[48px]"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-stone-900 border border-stone-800 hover:bg-stone-800 text-stone-300 text-xs font-serif transition-colors cursor-pointer min-h-[42px]"
           >
-            {isActive ? (
-              <>
-                <Pause className="w-4 h-4 fill-current" />
-                <span>pause.</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4 fill-current" />
-                <span>resume.</span>
-              </>
-            )}
+            {isActive ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+            <span>{isActive ? 'Pause Timer' : 'Resume'}</span>
           </button>
 
           <button
-            onClick={handleAddFiveMinutes}
-            className="p-3.5 rounded-2xl bg-stone-900 border border-stone-800 text-stone-400 hover:text-white hover:bg-stone-800 transition-colors cursor-pointer flex items-center justify-center"
-            title="Add 5 minutes to this sprint"
+            onClick={handleReset}
+            className="p-2.5 rounded-xl bg-stone-900 border border-stone-800 hover:bg-stone-800 text-stone-400 hover:text-white transition-colors cursor-pointer min-h-[42px]"
+            title="Reset timer"
           >
-            <Plus className="w-4 h-4" />
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* The Two Primary Action Buttons: "Complete Chunk" and "Exit Zen Mode" */}
+        <div className="flex items-center gap-3 w-full sm:w-auto order-1 sm:order-2">
+          <button
+            onClick={handleExitZenMode}
+            className="flex-1 sm:flex-initial px-5 py-3 rounded-2xl bg-stone-900 hover:bg-stone-800 text-stone-300 hover:text-white border border-stone-800 text-xs sm:text-sm font-serif transition-all cursor-pointer min-h-[46px]"
+          >
+            Exit Zen
           </button>
 
-          {mode === 'focus' ? (
-            <button
-              onClick={handleSwitchToBreak}
-              className="p-3.5 rounded-2xl bg-stone-900 border border-stone-800 text-amber-400/90 hover:text-amber-300 hover:bg-stone-800 transition-colors cursor-pointer"
-              title="Switch to mindful break"
-            >
-              <Coffee className="w-4 h-4" />
-            </button>
-          ) : (
-            <button
-              onClick={handleSwitchToFocus}
-              className="p-3.5 rounded-2xl bg-stone-900 border border-stone-800 text-emerald-400/90 hover:text-emerald-300 hover:bg-stone-800 transition-colors cursor-pointer"
-              title="Return to focus"
-            >
-              <Sparkles className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        {/* Grounding Micro-Mantra */}
-        <div 
-          onClick={handleCycleMantra}
-          className="pt-4 pb-2 px-4 cursor-pointer group relative z-10 transition-transform active:scale-[0.99]"
-          title="Tap to read another gentle reminder"
-        >
-          <div className="flex items-center justify-center gap-1.5 text-xs font-serif italic text-stone-400 group-hover:text-stone-300 transition-colors">
-            <Quote className="w-3 h-3 text-stone-600 shrink-0 rotate-180" />
-            <span>"{MANTRAS[mantraIndex]}"</span>
-          </div>
-          <span className="text-[10px] text-stone-600 group-hover:text-stone-500 font-sans mt-0.5 block">
-            tap to cycle intention
-          </span>
-        </div>
-
-        {/* Mark Done Early */}
-        <div className="pt-3 w-full border-t border-stone-800/80 relative z-10">
           <button
-            onClick={handleCompleteNow}
-            className="w-full py-3 px-4 rounded-2xl bg-emerald-950/60 border border-emerald-800/50 text-emerald-300 hover:bg-emerald-900/70 font-serif text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
+            onClick={handleCompleteChunk}
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-[#FAF8F5] text-stone-950 hover:bg-white text-xs sm:text-sm font-serif font-medium transition-all shadow-md active:scale-95 cursor-pointer min-h-[46px]"
           >
-            <Check className="w-4 h-4" />
-            <span>mark block completed early.</span>
+            <Check className="w-4 h-4 text-emerald-700 stroke-[3]" />
+            <span>Complete Chunk</span>
           </button>
         </div>
       </div>

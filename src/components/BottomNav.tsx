@@ -12,7 +12,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab })
       <div className="grid grid-cols-4 items-center h-15">
         <button
           onClick={() => setActiveTab('today')}
-          className={`flex flex-col items-center justify-center min-h-[44px] min-w-[44px] transition-colors ${
+          className={`flex flex-col items-center justify-center min-h-[48px] min-w-[48px] transition-all active:scale-95 cursor-pointer select-none ${
             activeTab === 'today' ? 'text-stone-900' : 'text-stone-400 hover:text-stone-600'
           }`}
         >
@@ -24,7 +24,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab })
 
         <button
           onClick={() => setActiveTab('schedule')}
-          className={`flex flex-col items-center justify-center min-h-[44px] min-w-[44px] transition-colors ${
+          className={`flex flex-col items-center justify-center min-h-[48px] min-w-[48px] transition-all active:scale-95 cursor-pointer select-none ${
             activeTab === 'schedule' ? 'text-stone-900' : 'text-stone-400 hover:text-stone-600'
           }`}
         >
@@ -36,7 +36,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab })
 
         <button
           onClick={() => setActiveTab('tasks')}
-          className={`flex flex-col items-center justify-center min-h-[44px] min-w-[44px] transition-colors ${
+          className={`flex flex-col items-center justify-center min-h-[48px] min-w-[48px] transition-all active:scale-95 cursor-pointer select-none ${
             activeTab === 'tasks' ? 'text-stone-900' : 'text-stone-400 hover:text-stone-600'
           }`}
         >
@@ -48,7 +48,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab })
 
         <button
           onClick={() => setActiveTab('settings')}
-          className={`flex flex-col items-center justify-center min-h-[44px] min-w-[44px] transition-colors ${
+          className={`flex flex-col items-center justify-center min-h-[48px] min-w-[48px] transition-all active:scale-95 cursor-pointer select-none ${
             activeTab === 'settings' ? 'text-stone-900' : 'text-stone-400 hover:text-stone-600'
           }`}
         >
