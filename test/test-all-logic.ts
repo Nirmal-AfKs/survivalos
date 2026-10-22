@@ -1120,6 +1120,34 @@ it('parses mixed multiline syllabus outlines ignoring blank lines and leading bu
   assert.strictEqual(result.tasks[3].title, 'Machine Learning Paper Reading');
 });
 
+it('dynamically slices tasks based on active rhythm focusBlockMinutes (e.g. 45m, 50m, 60m)', () => {
+  // Test 45-minute focus blocks: 90m -> exactly 2 blocks of 45m
+  const parsed45 = parseOutlineLine('Calculus Review - 90m', 0, new Date(), 45);
+  assert.ok(parsed45);
+  assert.strictEqual(parsed45!.chunkSize, 45);
+  assert.strictEqual(parsed45!.chunkCount, 2);
+  assert.strictEqual(parsed45!.chunks.length, 2);
+  assert.strictEqual(parsed45!.chunks[0].durationMinutes, 45);
+  assert.strictEqual(parsed45!.chunks[1].durationMinutes, 45);
+
+  // Test 50-minute focus blocks: 120m -> 3 blocks (50m, 50m, 20m)
+  const parsed50 = parseOutlineLine('Lab Report 2h', 0, new Date(), 50);
+  assert.ok(parsed50);
+  assert.strictEqual(parsed50!.chunkSize, 50);
+  assert.strictEqual(parsed50!.chunkCount, 3);
+  assert.strictEqual(parsed50!.chunks[0].durationMinutes, 50);
+  assert.strictEqual(parsed50!.chunks[1].durationMinutes, 50);
+  assert.strictEqual(parsed50!.chunks[2].durationMinutes, 20);
+
+  // Test full parseRawCourseOutline with 45m rhythm
+  const raw = `Calculus Review - 90m\nMachine Learning Paper Reading`;
+  const result45 = parseRawCourseOutline(raw, new Date(), 45);
+  assert.strictEqual(result45.focusBlockMinutes, 45);
+  assert.strictEqual(result45.tasks[0].chunkCount, 2);
+  assert.strictEqual(result45.tasks[1].durationMinutes, 45); // default fallback to 1 focus block
+  assert.strictEqual(result45.totalChunks, 3); // 2 + 1
+});
+
 it('parses natural deadline tags "@ tomorrow", "@ Friday", "@ in 3 days", and defaults to 2 days', () => {
   const baseDate = new Date(2026, 9, 20); // Tuesday, Oct 20, 2026
   

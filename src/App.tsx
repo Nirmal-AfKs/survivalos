@@ -803,6 +803,7 @@ export default function App() {
         onOpenAddOns={() => setIsAddOnsOpen(true)}
         onImportTasks={handleImportOutlineTasks}
         todayKey={todayKey}
+        focusMinutes={settings.focusBlockMinutes}
       />
 
       {/* Clean Re-alignment & Action Toast */}

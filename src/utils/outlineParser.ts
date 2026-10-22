@@ -5,7 +5,7 @@
  *   - 'Lab Report 2h @ Friday'
  *   - 'Organic Chemistry (45m) @ in 3 days'
  *   - 'Machine Learning Paper Reading' (defaults to 2 days from today)
- * Slices tasks into 30m focus chunks and projects their multi-day distribution.
+ * Dynamically slices tasks into focus chunks based on active rhythm settings (e.g. 20m, 45m, 50m, 60m, default 30m).
  */
 
 import { formatDateKey, addDays, parseDateKey } from './scheduler';
@@ -29,6 +29,7 @@ export interface ParsedOutlineTask {
   relativeDays: number;    // Days from baseDate (0 = today, 1 = tomorrow, etc.)
   deadlineLabel: string;   // Clean label e.g. "Tomorrow", "Friday", "In 3 days"
   chunkCount: number;
+  chunkSize: number;       // The focus duration used for slicing (e.g. 45, 30)
   chunks: OutlineChunk[];
 }
 
@@ -36,6 +37,7 @@ export interface OutlineParseResult {
   tasks: ParsedOutlineTask[];
   totalDurationMinutes: number;
   totalChunks: number;
+  focusBlockMinutes: number;
 }
 
 const DAY_OF_WEEK_NAMES: Record<string, number> = {
@@ -168,17 +170,21 @@ function formatPlannedDayLabel(offset: number, baseDate: Date): string {
 }
 
 /**
- * Parses a single line of text into a task with 30m chunking and natural deadline
+ * Parses a single line of text into a task with dynamic rhythm chunking and natural deadline.
+ * @param focusBlockMinutes The active focus block duration from user's current rhythm settings (defaults to 30).
  */
 export function parseOutlineLine(
   line: string, 
   index: number = 0, 
-  baseDate: Date = new Date()
+  baseDate: Date = new Date(),
+  focusBlockMinutes: number = 30
 ): ParsedOutlineTask | null {
   const trimmed = line.trim();
   if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('#')) {
     return null;
   }
+
+  const chunkSize = Math.max(10, Math.min(180, focusBlockMinutes && focusBlockMinutes > 0 ? focusBlockMinutes : 30));
 
   let textWithoutDeadline = trimmed;
   let rawDeadlineTag: string | null = null;
@@ -192,7 +198,7 @@ export function parseOutlineLine(
 
   const deadlineInfo = parseDeadlineString(rawDeadlineTag, baseDate);
 
-  let durationMinutes = 30; // Default to 30m
+  let durationMinutes = chunkSize; // Default to 1 focus block of user's active rhythm
   let cleanedTitle = textWithoutDeadline;
 
   // 2. Try Hour + Min regex (e.g. '2h', '1.5h', '1h 30m')
@@ -206,7 +212,7 @@ export function parseOutlineLine(
     // 3. Try Minutes regex (e.g. '90m', '45 min')
     const minMatch = textWithoutDeadline.match(/(?:[-–—:\s(\[]*)\b(\d+)\s*(?:minutes|minute|mins|min|m)\b[)\]]*/i);
     if (minMatch) {
-      durationMinutes = parseInt(minMatch[1], 10) || 30;
+      durationMinutes = parseInt(minMatch[1], 10) || chunkSize;
       cleanedTitle = textWithoutDeadline.replace(minMatch[0], '');
     }
   }
@@ -224,8 +230,7 @@ export function parseOutlineLine(
     cleanedTitle = `Study Topic ${index + 1}`;
   }
 
-  // 4. Slicing into 30-min chunks
-  const chunkSize = 30;
+  // 4. Slicing dynamically into focus chunks of size `chunkSize`
   const chunkCount = Math.max(1, Math.ceil(durationMinutes / chunkSize));
   const relDays = deadlineInfo.relativeDays;
 
@@ -282,22 +287,25 @@ export function parseOutlineLine(
     relativeDays: deadlineInfo.relativeDays,
     deadlineLabel: deadlineInfo.deadlineLabel,
     chunkCount,
+    chunkSize,
     chunks,
   };
 }
 
 /**
- * Parses raw multi-line outline into structured tasks with multi-day distribution
+ * Parses raw multi-line outline into structured tasks with dynamic rhythm multi-day distribution
  */
 export function parseRawCourseOutline(
   rawText: string, 
-  baseDate: Date = new Date()
+  baseDate: Date = new Date(),
+  focusBlockMinutes: number = 30
 ): OutlineParseResult {
   const lines = rawText.split(/\r?\n/);
   const tasks: ParsedOutlineTask[] = [];
+  const chunkSize = Math.max(10, Math.min(180, focusBlockMinutes && focusBlockMinutes > 0 ? focusBlockMinutes : 30));
 
   lines.forEach((line, idx) => {
-    const parsed = parseOutlineLine(line, idx, baseDate);
+    const parsed = parseOutlineLine(line, idx, baseDate, chunkSize);
     if (parsed) {
       tasks.push(parsed);
     }
@@ -310,5 +318,6 @@ export function parseRawCourseOutline(
     tasks,
     totalDurationMinutes,
     totalChunks,
+    focusBlockMinutes: chunkSize,
   };
 }

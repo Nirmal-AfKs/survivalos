@@ -2,27 +2,30 @@ import React, { useState, useMemo } from 'react';
 import { 
   X, 
   FileText, 
-  Sparkles, 
-  Check, 
   Lock, 
   Layers, 
   Clock, 
   Calendar, 
   ExternalLink,
   KeyRound,
-  ArrowRight
+  Check
 } from 'lucide-react';
-import { parseRawCourseOutline, ParsedOutlineTask } from '../utils/outlineParser';
+import { parseRawCourseOutline } from '../utils/outlineParser';
 import { WorkTask } from '../types';
-import { PRO_ADDON, PRO_CHECKOUT_URL, applyBypassCode } from '../utils/addons';
+import { 
+  WHOP_ANNUAL_CHECKOUT_URL, 
+  WHOP_MONTHLY_CHECKOUT_URL, 
+  applyBypassCode 
+} from '../utils/addons';
 
 interface ImportOutlineModalProps {
   isOpen: boolean;
   onClose: () => void;
   isImporterUnlocked: boolean;
-  onOpenAddOns: () => void;
+  onOpenAddOns?: () => void;
   onImportTasks: (tasks: WorkTask[], toastMessage: string) => void;
   todayKey: string;
+  focusMinutes?: number;
 }
 
 const SAMPLE_OUTLINE = `Calculus Review - 90m @ tomorrow
@@ -37,21 +40,23 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
   onOpenAddOns,
   onImportTasks,
   todayKey,
+  focusMinutes = 30,
 }) => {
   const [rawText, setRawText] = useState(SAMPLE_OUTLINE);
   const [bypassFeedback, setBypassFeedback] = useState<string | null>(null);
 
   const baseDate = useMemo(() => new Date(), []);
+  const activeFocusMinutes = Math.max(10, Math.min(180, focusMinutes && focusMinutes > 0 ? focusMinutes : 30));
 
   const parsed = useMemo(() => {
-    return parseRawCourseOutline(rawText, baseDate);
-  }, [rawText, baseDate]);
+    return parseRawCourseOutline(rawText, baseDate, activeFocusMinutes);
+  }, [rawText, baseDate, activeFocusMinutes]);
 
   if (!isOpen) return null;
 
   const handleDistribute = () => {
     if (!isImporterUnlocked) {
-      onOpenAddOns();
+      handleOpenAnnualCheckout();
       return;
     }
 
@@ -80,11 +85,19 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
     onClose();
   };
 
-  const handleOpenCheckout = () => {
+  const handleOpenAnnualCheckout = () => {
     try {
-      window.open(PRO_CHECKOUT_URL, '_blank', 'noopener,noreferrer');
+      window.open(WHOP_ANNUAL_CHECKOUT_URL, '_blank', 'noopener,noreferrer');
     } catch {
-      window.location.href = PRO_CHECKOUT_URL;
+      window.location.href = WHOP_ANNUAL_CHECKOUT_URL;
+    }
+  };
+
+  const handleOpenMonthlyCheckout = () => {
+    try {
+      window.open(WHOP_MONTHLY_CHECKOUT_URL, '_blank', 'noopener,noreferrer');
+    } catch {
+      window.location.href = WHOP_MONTHLY_CHECKOUT_URL;
     }
   };
 
@@ -160,7 +173,7 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
           <div className="flex items-center justify-between text-xs font-serif">
             <span className="font-semibold text-stone-800 flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Multi-Day Schedule Distribution Preview:</span>
+              <span>Live {activeFocusMinutes}-Minute Slicing Preview</span>
             </span>
             <span className="font-mono text-stone-600 text-[11px]">
               {parsed.tasks.length} topics · {parsed.totalDurationMinutes}m · <strong className="text-stone-900">{parsed.totalChunks} focus chunks</strong>
@@ -183,7 +196,7 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
                         <span>due: {task.deadlineLabel}</span>
                       </span>
                       <span className="font-mono text-[10px] text-stone-600 bg-stone-200/70 px-2 py-0.5 rounded-md">
-                        {task.durationMinutes}m ({task.chunkCount} × 30m)
+                        {task.durationMinutes}m ({task.chunkCount} x {task.chunkSize}m)
                       </span>
                     </div>
                   </div>
@@ -215,80 +228,76 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
           )}
         </div>
 
-        {/* Free Tier Notice & Pro Upgrade Banner */}
-        {!isImporterUnlocked && (
-          <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200 text-xs font-serif text-amber-950 space-y-2.5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-2.5">
-                <Lock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                <div className="space-y-0.5 leading-relaxed">
-                  <strong className="text-amber-950 font-semibold">
-                    {PRO_ADDON.name}
-                  </strong>
-                  <p className="text-[11px] text-amber-900/90">
-                    Pricing: $4 / month or $24 / year (Save 50% — 6 Months Free). Instant 1-tap slicing and interleaving across your active multi-day schedule.
-                  </p>
+        {/* Footer Actions */}
+        <div className="pt-3 border-t border-stone-200/80 space-y-3">
+          {isImporterUnlocked ? (
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2.5 text-xs font-serif text-stone-600 hover:text-stone-900 rounded-xl hover:bg-stone-200/60 transition-colors cursor-pointer min-h-[40px] flex items-center justify-center"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={parsed.tasks.length === 0}
+                onClick={handleDistribute}
+                className="inline-flex items-center justify-center gap-2 px-6 py-2.5 text-xs sm:text-sm font-serif font-medium rounded-xl bg-stone-900 hover:bg-stone-800 text-white transition-all shadow-sm active:scale-[0.98] cursor-pointer min-h-[42px] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span>Distribute Across Schedule</span>
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2.5 text-xs font-serif text-stone-600 hover:text-stone-900 rounded-xl hover:bg-stone-200/60 transition-colors cursor-pointer min-h-[40px] flex items-center justify-center order-2 sm:order-1"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenAnnualCheckout}
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-serif text-xs sm:text-sm font-medium shadow-sm transition-all active:scale-[0.98] cursor-pointer flex-1 order-1 sm:order-2"
+                >
+                  <Lock className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Unlock Pro & Distribute — $24/year (Save 50%)</span>
+                  <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+                </button>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-1 text-xs font-serif">
+                <button
+                  type="button"
+                  onClick={handleOpenMonthlyCheckout}
+                  className="text-stone-500 hover:text-stone-900 underline underline-offset-4 decoration-stone-300 transition-colors cursor-pointer"
+                >
+                  or choose Monthly ($4 / month)
+                </button>
+
+                <div className="flex items-center gap-1.5 text-[11px] font-mono text-stone-400">
+                  <button
+                    type="button"
+                    onClick={handleQuickBypass}
+                    className="hover:text-stone-700 underline decoration-stone-300 cursor-pointer inline-flex items-center gap-1"
+                    title="Developer testing bypass"
+                  >
+                    <KeyRound className="w-3 h-3 text-stone-400" />
+                    <span>Dev bypass: test-importer</span>
+                  </button>
+                  {bypassFeedback && (
+                    <span className="font-serif font-semibold text-emerald-600 animate-in fade-in">
+                      {bypassFeedback}
+                    </span>
+                  )}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={handleOpenCheckout}
-                className="shrink-0 px-3.5 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-serif text-xs font-medium inline-flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer"
-              >
-                <span>Unlock Pro</span>
-                <ExternalLink className="w-3 h-3 opacity-80" />
-              </button>
             </div>
-
-            {/* Developer Bypass Link */}
-            <div className="pt-1 border-t border-amber-200/60 flex items-center justify-between text-[11px] text-amber-800">
-              <button
-                type="button"
-                onClick={handleQuickBypass}
-                className="hover:text-amber-950 underline decoration-amber-400 font-mono cursor-pointer inline-flex items-center gap-1"
-              >
-                <KeyRound className="w-3 h-3 text-amber-700" />
-                <span>Developer Bypass: Click to unlock with test-importer</span>
-              </button>
-              {bypassFeedback && (
-                <span className="font-serif font-semibold text-emerald-800">{bypassFeedback}</span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Footer Actions */}
-        <div className="pt-2 border-t border-stone-200/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-serif text-stone-600 hover:text-stone-900 rounded-xl hover:bg-stone-200/60 transition-colors cursor-pointer min-h-[40px] flex items-center justify-center"
-          >
-            Cancel
-          </button>
-
-          <button
-            type="button"
-            disabled={parsed.tasks.length === 0}
-            onClick={handleDistribute}
-            className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-serif font-medium rounded-xl transition-all shadow-xs active:scale-[0.98] cursor-pointer min-h-[42px] ${
-              !isImporterUnlocked
-                ? 'bg-amber-400 hover:bg-amber-300 text-stone-950'
-                : 'bg-stone-900 hover:bg-stone-800 text-white'
-            }`}
-          >
-            {!isImporterUnlocked ? (
-              <>
-                <Lock className="w-3.5 h-3.5" />
-                <span>Unlock Pro to Distribute Across Schedule ({parsed.totalChunks} blocks)</span>
-              </>
-            ) : (
-              <>
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Distribute Across Schedule ({parsed.totalChunks} blocks)</span>
-              </>
-            )}
-          </button>
+          )}
         </div>
       </div>
     </div>
