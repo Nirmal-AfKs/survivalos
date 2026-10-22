@@ -11,7 +11,13 @@ import {
   parseSquadPayloadString, 
   buildSquadShareUrl, 
   buildSquadReplyUrl, 
-  getSquadBaseUrl 
+  getSquadBaseUrl,
+  getLiveBaseUrl,
+  getExactLiveSiteUrl,
+  encodePairPayload,
+  parsePairPayloadString,
+  buildPairShareUrl,
+  CadencePairData
 } from '../src/utils/squad';
 import { 
   cleanTaskTitle, 
@@ -192,9 +198,39 @@ it('matches weekly recurring events across future recurring days', () => {
 // ==========================================
 console.log('\n📌 Testing Squad Overlap Radar & Payload Compaction:');
 
-it('uses fallback URL when hostname is not survivalos-b63.pages.dev', () => {
-  const url = getSquadBaseUrl();
-  assert.strictEqual(url, 'https://survivalos-b63.pages.dev');
+it('dynamically uses live site origin rather than hardcoded domain', () => {
+  // When window is undefined (e.g. Node test environment)
+  const defaultUrl = getSquadBaseUrl();
+  assert.strictEqual(defaultUrl, 'https://cadence.app');
+  assert.strictEqual(getLiveBaseUrl(), 'https://cadence.app');
+  assert.ok(!defaultUrl.includes('survivalos-b63.pages.dev'));
+
+  // When window is present (browser runtime)
+  const originalWindow = (global as any).window;
+  try {
+    (global as any).window = {
+      location: {
+        origin: 'https://ais-dev-example.asia-southeast1.run.app',
+        pathname: '/',
+        href: 'https://ais-dev-example.asia-southeast1.run.app/?utm_source=test#squad=old',
+        hostname: 'ais-dev-example.asia-southeast1.run.app',
+      }
+    };
+    const liveUrl = getSquadBaseUrl();
+    assert.strictEqual(liveUrl, 'https://ais-dev-example.asia-southeast1.run.app');
+    
+    // Exact live site URL stripped of query params and hash for PWA install QR code
+    const exactPwaUrl = getExactLiveSiteUrl();
+    assert.strictEqual(exactPwaUrl, 'https://ais-dev-example.asia-southeast1.run.app/');
+
+    // With subpath
+    (global as any).window.location.pathname = '/cadence/';
+    (global as any).window.location.href = 'https://ais-dev-example.asia-southeast1.run.app/cadence/?test=1';
+    assert.strictEqual(getSquadBaseUrl(), 'https://ais-dev-example.asia-southeast1.run.app/cadence');
+    assert.strictEqual(getExactLiveSiteUrl(), 'https://ais-dev-example.asia-southeast1.run.app/cadence/');
+  } finally {
+    (global as any).window = originalWindow;
+  }
 });
 
 it('encodes squad payload into a compact array base64 string', () => {
@@ -264,7 +300,7 @@ it('gracefully decodes legacy JSON object payloads and minimal arrays', () => {
   assert.strictEqual(parsedMinimal.blocks[1].endTime, '11:45');
 });
 
-it('builds share URLs with #squad= parameter pointing to sanitized domain', () => {
+it('builds share URLs with #squad= parameter pointing to dynamic live domain', () => {
   const payload: SquadSharePayload = {
     v: 1,
     curfew: '21:30',
@@ -273,15 +309,83 @@ it('builds share URLs with #squad= parameter pointing to sanitized domain', () =
     blocks: [{ startTime: '15:00', endTime: '15:45', title: 'Writing', category: 'focus', durationMinutes: 45 }]
   };
   const shareUrl = buildSquadShareUrl(payload);
-  assert.ok(shareUrl.startsWith('https://survivalos-b63.pages.dev#squad='));
+  assert.ok(shareUrl.startsWith('https://cadence.app#squad='));
+  assert.ok(!shareUrl.includes('survivalos-b63.pages.dev'));
 
   const replyUrl = buildSquadReplyUrl(payload);
-  assert.ok(replyUrl.startsWith('https://survivalos-b63.pages.dev#squad='));
+  assert.ok(replyUrl.startsWith('https://cadence.app#squad='));
   // Reply payload has matched=true
   const replyHash = replyUrl.split('#squad=')[1];
   const decodedReply = parseSquadPayloadString(replyHash);
   assert.ok(decodedReply !== null);
   assert.strictEqual(decodedReply.matched, true);
+});
+
+it('encodes and decodes Pair with Phone cadence sync payloads seamlessly', () => {
+  const pairData: CadencePairData = {
+    v: 1,
+    pro: true,
+    dateKey: '2026-10-20',
+    tasks: [
+      {
+        title: 'Microeconomics Problem Set',
+        estimatedMinutes: 60,
+        completedMinutes: 0,
+        category: 'academic',
+        priority: 'high',
+        color: 'stone',
+      },
+      {
+        title: 'Organic Chemistry Lab Notes',
+        estimatedMinutes: 90,
+        completedMinutes: 30,
+        category: 'study',
+        priority: 'medium',
+        color: 'emerald',
+      }
+    ],
+    events: [
+      {
+        title: 'Department Seminar',
+        time: '14:00',
+        date: '2026-10-20',
+        durationMinutes: 60,
+        category: 'academic',
+        color: 'stone',
+      }
+    ],
+    settings: {
+      averageDay: { startHour: '08:30', endHour: '21:00', applicableDays: [1, 2, 3, 4, 5] },
+      fullyHomeDay: { startHour: '09:00', endHour: '22:00', applicableDays: [0, 6], lunchBreakStart: '12:30', lunchBreakEnd: '13:30' },
+      breakIntervalMinutes: 10,
+      focusBlockMinutes: 45,
+    }
+  };
+
+  const encoded = encodePairPayload(pairData);
+  assert.ok(encoded.length > 0);
+  assert.ok(!encoded.includes('{'));
+
+  // Test pair share URL
+  const pairUrl = buildPairShareUrl(pairData);
+  assert.ok(pairUrl.startsWith('https://cadence.app#pair='));
+  assert.ok(!pairUrl.includes('survivalos'));
+
+  // Decode back
+  const decoded = parsePairPayloadString(encoded);
+  assert.ok(decoded !== null);
+  assert.strictEqual(decoded.v, 1);
+  assert.strictEqual(decoded.pro, true);
+  assert.strictEqual(decoded.dateKey, '2026-10-20');
+  assert.strictEqual(decoded.tasks?.length, 2);
+  assert.strictEqual(decoded.tasks?.[0].title, 'Microeconomics Problem Set');
+  assert.strictEqual(decoded.tasks?.[0].estimatedMinutes, 60);
+  assert.strictEqual(decoded.tasks?.[1].title, 'Organic Chemistry Lab Notes');
+  assert.strictEqual(decoded.tasks?.[1].completedMinutes, 30);
+  assert.strictEqual(decoded.events?.length, 1);
+  assert.strictEqual(decoded.events?.[0].title, 'Department Seminar');
+  assert.strictEqual(decoded.events?.[0].time, '14:00');
+  assert.strictEqual(decoded.settings?.averageDay?.startHour, '08:30');
 });
 
 // ==========================================
@@ -1012,6 +1116,115 @@ it('parses mixed multiline syllabus outlines ignoring blank lines and leading bu
   assert.strictEqual(result.tasks[1].title, 'Lab Report');
   assert.strictEqual(result.tasks[2].title, 'Organic Chemistry Mechanisms');
   assert.strictEqual(result.tasks[3].title, 'Machine Learning Paper Reading');
+});
+
+it('parses natural deadline tags "@ tomorrow", "@ Friday", "@ in 3 days", and defaults to 2 days', () => {
+  const baseDate = new Date(2026, 9, 20); // Tuesday, Oct 20, 2026
+  
+  // 1. @ tomorrow
+  const taskTomorrow = parseOutlineLine('Calculus Review - 90m @ tomorrow', 0, baseDate);
+  assert.ok(taskTomorrow);
+  assert.strictEqual(taskTomorrow!.title, 'Calculus Review');
+  assert.strictEqual(taskTomorrow!.durationMinutes, 90);
+  assert.strictEqual(taskTomorrow!.deadlineDate, '2026-10-21'); // Wednesday (tomorrow)
+  assert.strictEqual(taskTomorrow!.relativeDays, 1);
+  assert.strictEqual(taskTomorrow!.deadlineLabel, 'Tomorrow');
+
+  // 2. @ Friday
+  const taskFriday = parseOutlineLine('Lab Report 2h @ Friday', 1, baseDate);
+  assert.ok(taskFriday);
+  assert.strictEqual(taskFriday!.title, 'Lab Report');
+  assert.strictEqual(taskFriday!.durationMinutes, 120);
+  assert.strictEqual(taskFriday!.deadlineDate, '2026-10-23'); // Friday (3 days from Tuesday)
+  assert.strictEqual(taskFriday!.relativeDays, 3);
+  assert.strictEqual(taskFriday!.deadlineLabel, 'Friday');
+
+  // 3. @ in 3 days
+  const task3Days = parseOutlineLine('Organic Chemistry Mechanisms (45m) @ in 3 days', 2, baseDate);
+  assert.ok(task3Days);
+  assert.strictEqual(task3Days!.title, 'Organic Chemistry Mechanisms');
+  assert.strictEqual(task3Days!.durationMinutes, 45);
+  assert.strictEqual(task3Days!.deadlineDate, '2026-10-23'); // 3 days from Oct 20
+  assert.strictEqual(task3Days!.relativeDays, 3);
+  assert.strictEqual(task3Days!.deadlineLabel, 'In 3 days');
+
+  // 4. Default fallback: No @ deadline tag defaults to 2 days from today
+  const taskFallback = parseOutlineLine('Machine Learning Paper Reading', 3, baseDate);
+  assert.ok(taskFallback);
+  assert.strictEqual(taskFallback!.title, 'Machine Learning Paper Reading');
+  assert.strictEqual(taskFallback!.deadlineDate, '2026-10-22'); // 2 days from Oct 20
+  assert.strictEqual(taskFallback!.relativeDays, 2);
+  assert.strictEqual(taskFallback!.deadlineLabel, 'In 2 days (Default)');
+});
+
+it('projects chunk landing labels across the week (e.g. Part 1: Today | Part 2: Tomorrow | Part 3: Friday)', () => {
+  const baseDate = new Date(2026, 9, 20); // Tuesday, Oct 20, 2026
+  
+  // 3 chunks due on Friday (3 days from Tuesday)
+  const task = parseOutlineLine('Calculus Review - 90m @ Friday', 0, baseDate);
+  assert.ok(task);
+  assert.strictEqual(task!.chunks.length, 3);
+  assert.strictEqual(task!.chunks[0].plannedDayLabel, 'Today');
+  assert.strictEqual(task!.chunks[1].plannedDayLabel, 'Tomorrow');
+  assert.strictEqual(task!.chunks[2].plannedDayLabel, 'Friday');
+
+  // 4 chunks due on Friday
+  const labTask = parseOutlineLine('Lab Report 2h @ Friday', 1, baseDate);
+  assert.ok(labTask);
+  assert.strictEqual(labTask!.chunks.length, 4);
+  assert.strictEqual(labTask!.chunks[0].plannedDayLabel, 'Today');
+  assert.strictEqual(labTask!.chunks[1].plannedDayLabel, 'Tomorrow');
+  assert.strictEqual(labTask!.chunks[2].plannedDayLabel, 'Thursday');
+  assert.strictEqual(labTask!.chunks[3].plannedDayLabel, 'Friday');
+});
+
+it('distributes imported outline tasks across multi-day schedule avoiding capacity exceeded overflow', () => {
+  const baseDate = new Date(2026, 9, 20); // Tuesday, Oct 20, 2026
+  const raw = `
+    Calculus Review - 90m @ tomorrow
+    Lab Report 2h @ Friday
+    Organic Chemistry Mechanisms (45m) @ in 3 days
+    Machine Learning Paper Reading
+  `;
+  const result = parseRawCourseOutline(raw, baseDate);
+  assert.strictEqual(result.tasks.length, 4);
+  assert.strictEqual(result.totalChunks, 10); // 3 + 4 + 2 + 1 = 10 chunks (5 hours)
+
+  // Convert to WorkTasks with their parsed multi-day deadlineDates
+  const newTasks: WorkTask[] = result.tasks.map((item, idx) => ({
+    id: `task-imported-${idx}`,
+    title: item.title,
+    estimatedMinutes: item.durationMinutes,
+    completedMinutes: 0,
+    deadlineDate: item.deadlineDate, // Multi-day deadline!
+    category: 'academic',
+    color: 'indigo',
+    priority: 'high',
+    status: 'active',
+    createdAt: baseDate.toISOString(),
+  }));
+
+  const settings: ScheduleSettings = {
+    ...DEFAULT_SETTINGS,
+    finishDayBeforeDeadline: false,
+    focusBlockMinutes: 30,
+    breakIntervalMinutes: 10,
+    averageDay: {
+      startHour: '18:00',
+      endHour: '21:30', // 3.5 hours per evening
+      applicableDays: [1, 2, 3, 4, 5],
+    },
+  };
+
+  const slots = recalculateSchedule(newTasks, [], settings, [], baseDate);
+  
+  // Verify chunks are distributed across multiple days (not crammed into today)
+  const scheduledDays = new Set(slots.filter(s => !s.isUnscheduled).map(s => s.date));
+  assert.ok(scheduledDays.size >= 3, `Expected chunks distributed across at least 3 days, got ${scheduledDays.size}`);
+
+  // Crucial fix: ZERO chunks should enter the yellow "Capacity Exceeded / Holding" shelf
+  const unscheduled = slots.filter(s => s.isUnscheduled);
+  assert.strictEqual(unscheduled.length, 0, `Expected 0 unscheduled capacity exceeded chunks, got ${unscheduled.length}`);
 });
 
 // ==========================================

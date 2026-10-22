@@ -29,17 +29,20 @@ export interface CourseTemplatePayload {
 }
 
 /**
- * Returns safe base URL for templates, ensuring internal dev servers aren't leaked.
+ * Returns dynamic live base URL for templates.
+ * Dynamically uses window.location.origin (or window.location.href.split('?')[0])
+ * so template links always match the current live site.
  */
 export function getTemplateBaseUrl(): string {
   if (typeof window === 'undefined') {
-    return 'https://cadence.pages.dev';
+    return 'https://cadence.app';
   }
-  const hostname = (window.location.hostname || '').toLowerCase();
-  if (hostname.endsWith('.pages.dev') || hostname === 'cadence.app') {
-    return `${window.location.origin}${window.location.pathname.replace(/\/+$/, '')}`;
+  const origin = window.location.origin;
+  if (origin && origin !== 'null') {
+    const path = (window.location.pathname || '').replace(/\/+$/, '');
+    return `${origin}${path}`;
   }
-  return 'https://cadence.pages.dev';
+  return (window.location.href || 'https://cadence.app').split(/[?#]/)[0].replace(/\/+$/, '');
 }
 
 /**

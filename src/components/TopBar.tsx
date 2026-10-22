@@ -110,11 +110,11 @@ export const TopBar: React.FC<TopBarProps> = ({
           <button
             onClick={onOpenSquadRadar}
             className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs font-serif text-stone-700 bg-white/80 hover:bg-stone-200/60 border border-stone-200/90 rounded-xl transition-all cursor-pointer min-h-[40px] shadow-2xs"
-            title="Instant 1-tap WhatsApp/Telegram sharing loop"
+            title="Squad Radar & Mobile Pair with Phone"
           >
             <Users className="w-3.5 h-3.5 text-stone-600 shrink-0" />
-            <span className="hidden sm:inline">squad radar.</span>
-            <span className="hidden xs:inline sm:hidden">radar.</span>
+            <span className="hidden sm:inline">squad & share.</span>
+            <span className="hidden xs:inline sm:hidden">share.</span>
           </button>
 
           {/* Import Outline Button with subtle 'Pro' badge next to + add */}

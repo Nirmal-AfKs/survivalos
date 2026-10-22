@@ -7,18 +7,52 @@ import { SquadSharePayload, SquadFocusBlock, ScheduledSlot, ScheduleSettings } f
  */
 
 /**
- * Fallback to 'https://survivalos-b63.pages.dev' if current domain is not 'survivalos-b63.pages.dev'
- * Ensures internal dev URLs (*.run.app, localhost) are never leaked in share links.
+ * Dynamic live URL generator:
+ * Always dynamically uses window.location.origin (or window.location.href.split('?')[0])
+ * rather than any hardcoded URL or legacy domain.
+ * Ensures scanning QR codes or clicking share links on desktop always opens
+ * the exact current live site URL on mobile.
  */
 export function getSquadBaseUrl(): string {
   if (typeof window === 'undefined') {
-    return 'https://survivalos-b63.pages.dev';
+    return 'https://cadence.app';
   }
-  const hostname = (window.location.hostname || '').toLowerCase();
-  if (hostname === 'survivalos-b63.pages.dev') {
-    return `${window.location.origin}${window.location.pathname.replace(/\/+$/, '')}`;
+  const origin = window.location.origin;
+  if (origin && origin !== 'null') {
+    const path = (window.location.pathname || '').replace(/\/+$/, '');
+    return `${origin}${path}`;
   }
-  return 'https://survivalos-b63.pages.dev';
+  return (window.location.href || 'https://cadence.app').split(/[?#]/)[0].replace(/\/+$/, '');
+}
+
+export function getLiveBaseUrl(): string {
+  return getSquadBaseUrl();
+}
+
+/**
+ * Returns exact live site URL for clean PWA installation.
+ * Dynamically uses window.location.origin (or window.location.href.split('?')[0])
+ * ensuring desktop users scanning the QR code with phone camera open the exact live site URL.
+ */
+export function getExactLiveSiteUrl(): string {
+  if (typeof window === 'undefined') {
+    return 'https://cadence.app/';
+  }
+  try {
+    const cleanHref = (window.location.href || '').split('?')[0].split('#')[0];
+    if (cleanHref && cleanHref.startsWith('http')) {
+      return cleanHref.endsWith('/') ? cleanHref : `${cleanHref}/`;
+    }
+    const origin = window.location.origin;
+    if (origin && origin !== 'null') {
+      const pathname = window.location.pathname || '/';
+      const cleanPath = pathname.endsWith('/') ? pathname : `${pathname}/`;
+      return `${origin}${cleanPath}`;
+    }
+  } catch (err) {
+    console.warn('Failed to resolve exact live site URL', err);
+  }
+  return 'https://cadence.app/';
 }
 
 /**
@@ -344,3 +378,166 @@ export async function shareRadarIntent(message: string): Promise<'native' | 'wha
     return 'copied';
   }
 }
+
+/**
+ * Mobile Device Cadence Pairing & PWA Sync (Pro Feature)
+ * Serializes active schedule, tasks, events, and Pro unlock status
+ * into a compact base64 URL fragment (#pair=...) for instant 1-camera-scan sync.
+ */
+export interface CadencePairData {
+  v: number;
+  pro?: boolean;
+  dateKey?: string;
+  tasks?: Array<{
+    id?: string;
+    title: string;
+    estimatedMinutes: number;
+    completedMinutes: number;
+    category?: string;
+    priority?: 'high' | 'medium' | 'low';
+    color?: string;
+    dueDate?: string;
+  }>;
+  events?: Array<{
+    id?: string;
+    title: string;
+    time: string;
+    date: string;
+    durationMinutes: number;
+    category?: string;
+    color?: string;
+  }>;
+  settings?: Partial<ScheduleSettings>;
+}
+
+export function encodePairPayload(data: CadencePairData): string {
+  try {
+    const compact = [
+      data.v || 1,
+      data.pro ? 1 : 0,
+      data.dateKey || '',
+      (data.tasks || []).slice(0, 15).map(t => [
+        t.title,
+        t.estimatedMinutes,
+        t.completedMinutes || 0,
+        t.category || 'focus',
+        t.priority || 'medium',
+        t.color || 'stone',
+        t.dueDate || '',
+      ]),
+      (data.events || []).slice(0, 10).map(e => [
+        e.title,
+        e.time,
+        e.date || '',
+        e.durationMinutes || 60,
+        e.category || 'general',
+        e.color || 'stone',
+      ]),
+      data.settings ? {
+        averageDay: data.settings.averageDay,
+        fullyHomeDay: data.settings.fullyHomeDay,
+      } : null,
+    ];
+    const jsonStr = JSON.stringify(compact);
+    const b64 = btoa(unescape(encodeURIComponent(jsonStr)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    return b64;
+  } catch (err) {
+    console.error('Failed to encode pair payload', err);
+    return '';
+  }
+}
+
+export function parsePairPayloadString(rawStr: string): CadencePairData | null {
+  if (!rawStr) return null;
+  const trimmed = rawStr.trim();
+  try {
+    let b64 = trimmed.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) {
+      b64 += '=';
+    }
+    const binStr = atob(b64);
+    let jsonStr: string;
+    try {
+      jsonStr = decodeURIComponent(escape(binStr));
+    } catch {
+      jsonStr = binStr;
+    }
+    const parsed = JSON.parse(jsonStr);
+
+    if (Array.isArray(parsed)) {
+      const v = Number(parsed[0]) || 1;
+      const pro = parsed[1] === 1;
+      const dateKey = typeof parsed[2] === 'string' ? parsed[2] : '';
+      const rawTasks = Array.isArray(parsed[3]) ? parsed[3] : [];
+      const rawEvents = Array.isArray(parsed[4]) ? parsed[4] : [];
+      const rawSettings = parsed[5] || undefined;
+
+      const tasks = rawTasks.map((t: any, idx: number) => ({
+        id: `pair-task-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+        title: String(t[0] || 'Focus Sprint'),
+        estimatedMinutes: Math.max(15, Number(t[1]) || 30),
+        completedMinutes: Math.max(0, Number(t[2]) || 0),
+        category: String(t[3] || 'focus'),
+        priority: (t[4] as 'high' | 'medium' | 'low') || 'medium',
+        color: String(t[5] || 'stone'),
+        dueDate: t[6] ? String(t[6]) : undefined,
+      }));
+
+      const events = rawEvents.map((e: any, idx: number) => ({
+        id: `pair-event-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+        title: String(e[0] || 'Calendar Event'),
+        time: String(e[1] || '12:00'),
+        date: String(e[2] || ''),
+        durationMinutes: Math.max(15, Number(e[3]) || 60),
+        category: String(e[4] || 'general'),
+        color: String(e[5] || 'stone'),
+      }));
+
+      return {
+        v,
+        pro,
+        dateKey,
+        tasks,
+        events,
+        settings: rawSettings,
+      };
+    }
+  } catch (err) {
+    console.warn('Failed to parse pair payload string', err);
+  }
+  return null;
+}
+
+export function buildPairShareUrl(data: CadencePairData): string {
+  const hash = encodePairPayload(data);
+  const base = getSquadBaseUrl();
+  return `${base}#pair=${hash}`;
+}
+
+export function parsePairFromUrl(): CadencePairData | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    let rawEncoded = '';
+    if (window.location.hash.includes('pair=')) {
+      const hashPart = window.location.hash.slice(1);
+      const params = new URLSearchParams(hashPart);
+      rawEncoded = params.get('pair') || '';
+      if (!rawEncoded && hashPart.startsWith('pair=')) {
+        rawEncoded = hashPart.split('pair=')[1].split('&')[0];
+      }
+    }
+    if (!rawEncoded && window.location.search.includes('pair=')) {
+      const searchParams = new URLSearchParams(window.location.search);
+      rawEncoded = searchParams.get('pair') || '';
+    }
+    if (!rawEncoded) return null;
+    return parsePairPayloadString(rawEncoded);
+  } catch (err) {
+    console.warn('Failed to parse pair from URL', err);
+    return null;
+  }
+}
+

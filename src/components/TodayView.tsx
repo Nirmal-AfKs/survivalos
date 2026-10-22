@@ -14,7 +14,8 @@ import {
   Repeat,
   Zap,
   AlertTriangle,
-  Shield
+  Shield,
+  Share2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ScheduledSlot, LifeEvent, WorkTask, ScheduleSettings, SquadSharePayload, SquadFocusBlock } from '../types';
@@ -245,12 +246,21 @@ export const TodayView: React.FC<TodayViewProps> = ({
                 </div>
               </div>
 
-              <div className="text-xs font-serif text-stone-500 space-x-2">
-                <span>{settings.focusBlockMinutes}m focus</span>
-                <span>·</span>
-                <span>{settings.breakIntervalMinutes}m mindful rest</span>
-                <span>·</span>
-                <span>interleaved pace</span>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="text-xs font-serif text-stone-500 space-x-2">
+                  <span>{settings.focusBlockMinutes}m focus</span>
+                  <span>·</span>
+                  <span>{settings.breakIntervalMinutes}m mindful rest</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={onOpenSquadRadar}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif text-stone-700 bg-white hover:bg-stone-50 border border-stone-200/90 rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="Share availability or pair with phone"
+                >
+                  <Share2 className="w-3.5 h-3.5 text-stone-600" />
+                  <span>share / pair phone</span>
+                </button>
               </div>
             </div>
 

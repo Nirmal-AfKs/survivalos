@@ -299,10 +299,15 @@ export function recalculateSchedule(
   while (dayOffset < horizonDays) {
     const currentDay = addDays(startDate, dayOffset);
     const dayKey = formatDateKey(currentDay);
+    const isToday = dayOffset === 0;
+    const currentClockMinutes = isToday ? (startDate.getHours() * 60 + startDate.getMinutes()) : 0;
     
     // Find events on this day (including recurring weekly events)
     const dayEvents = events.filter(e => isEventOnDate(e, currentDay));
     const templates = getDailySlotTemplates(currentDay, settings, dayEvents);
+
+    // Track chunks scheduled per task on this specific day to ensure balanced multi-day pacing
+    const chunksTodayMap: Record<string, number> = {};
 
     for (const tpl of templates) {
       // Check if slot was already occupied by a completed slot
@@ -310,12 +315,18 @@ export function recalculateSchedule(
         continue;
       }
 
+      // If scheduling today with live clock time, only schedule into slots that start in the future
+      if (isToday && currentClockMinutes > 0 && timeToMinutes(tpl.startTime) < currentClockMinutes) {
+        continue;
+      }
+
       // Find candidates for this slot:
       // Must be a task that still needs chunks AND where currentDay <= effectiveLastDayDate
+      // (or currentDay <= rawDeadlineStr if capacity is needed)
       // AND not deferred until a future date
       const eligibleTasks = taskMeta.filter(t => 
         t.chunksScheduled < t.chunksNeeded && 
-        dayKey <= t.effectiveLastDayKey &&
+        (dayKey <= t.effectiveLastDayKey || dayKey <= t.rawDeadlineStr) &&
         (!t.task.deferredUntilDate || dayKey >= t.task.deferredUntilDate)
       );
 
@@ -324,30 +335,52 @@ export function recalculateSchedule(
         continue;
       }
 
-      // Interleaving selection:
-      // 1. If interleaving is enabled and multiple eligible tasks exist, pick one that is NOT the same as lastTaskId
-      let selectedTask = eligibleTasks.find(t => t.task.id !== lastTaskId);
-      if (!selectedTask) {
-        // If all available tasks are the same task, take it
-        selectedTask = eligibleTasks[0];
-      }
-
-      // Check urgency: If a task has ONLY as many remaining slots left before its deadline as chunks needed, it must be prioritized
-      const urgentTask = eligibleTasks.find(t => {
-        // days between currentDay and effectiveLastDayDate
+      // Multi-Day Pacing Logic:
+      // Calculate daily quota for each task: how many chunks should it ideally take on this day?
+      // Immediately urgent tasks (due today/tomorrow or tight horizon) take what they need.
+      // Tasks with future deadlines (e.g. Friday, in 3 days) distribute chunks across days.
+      const isUrgent = (t: typeof eligibleTasks[0]) => {
         const diffDays = Math.max(0, Math.round((t.effectiveLastDayDate.getTime() - currentDay.getTime()) / (1000 * 3600 * 24)));
         const slotsNeeded = t.chunksNeeded - t.chunksScheduled;
-        return diffDays <= 1 || slotsNeeded >= diffDays * 2;
+        return diffDays <= 1 || slotsNeeded >= Math.max(1, diffDays * 2);
+      };
+
+      const getDailyPacingQuota = (t: typeof eligibleTasks[0]) => {
+        const diffDays = Math.max(1, Math.round((t.effectiveLastDayDate.getTime() - currentDay.getTime()) / (1000 * 3600 * 24)) + 1);
+        const slotsNeeded = t.chunksNeeded - t.chunksScheduled;
+        return Math.max(1, Math.ceil(slotsNeeded / diffDays));
+      };
+
+      // Priority 1: Urgent tasks that must be done now
+      const urgentCandidate = eligibleTasks.find(t => isUrgent(t));
+
+      // Priority 2: Tasks that have not yet reached their daily pacing quota for this day
+      const pacedCandidates = eligibleTasks.filter(t => {
+        const scheduledToday = chunksTodayMap[t.task.id] || 0;
+        const quota = getDailyPacingQuota(t);
+        return scheduledToday < quota;
       });
 
-      if (urgentTask) {
-        selectedTask = urgentTask;
+      let selectedTask: typeof eligibleTasks[0] | undefined;
+
+      if (urgentCandidate) {
+        selectedTask = urgentCandidate;
+      } else if (pacedCandidates.length > 0) {
+        // Interleave: Pick a task different from the last scheduled task if possible
+        selectedTask = pacedCandidates.find(t => t.task.id !== lastTaskId) || pacedCandidates[0];
+      }
+
+      if (!selectedTask) {
+        // All eligible tasks for this day have reached their paced quota.
+        // Move to the next day to distribute remaining chunks cleanly across the schedule.
+        break;
       }
 
       selectedTask.chunksScheduled++;
+      chunksTodayMap[selectedTask.task.id] = (chunksTodayMap[selectedTask.task.id] || 0) + 1;
       lastTaskId = selectedTask.task.id;
 
-      const completedCount = preservedCompletedSlots.filter(s => s.workTaskId === selectedTask.task.id).length;
+      const completedCount = preservedCompletedSlots.filter(s => s.workTaskId === selectedTask!.task.id).length;
       const currentChunkNum = completedCount + selectedTask.chunksScheduled;
 
       newSlots.push({

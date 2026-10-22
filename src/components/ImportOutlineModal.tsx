@@ -1,8 +1,20 @@
 import React, { useState, useMemo } from 'react';
-import { X, FileText, Sparkles, Check, Lock, Layers, Clock, AlertCircle, ExternalLink } from 'lucide-react';
+import { 
+  X, 
+  FileText, 
+  Sparkles, 
+  Check, 
+  Lock, 
+  Layers, 
+  Clock, 
+  Calendar, 
+  ExternalLink,
+  KeyRound,
+  ArrowRight
+} from 'lucide-react';
 import { parseRawCourseOutline, ParsedOutlineTask } from '../utils/outlineParser';
 import { WorkTask } from '../types';
-import { PRO_ADDON, PRO_CHECKOUT_URL } from '../utils/addons';
+import { PRO_ADDON, PRO_CHECKOUT_URL, applyBypassCode } from '../utils/addons';
 
 interface ImportOutlineModalProps {
   isOpen: boolean;
@@ -13,9 +25,9 @@ interface ImportOutlineModalProps {
   todayKey: string;
 }
 
-const SAMPLE_OUTLINE = `Calculus Review - 90m
-Lab Report 2h
-Organic Chemistry Mechanisms (45m)
+const SAMPLE_OUTLINE = `Calculus Review - 90m @ tomorrow
+Lab Report 2h @ Friday
+Organic Chemistry Mechanisms (45m) @ in 3 days
 Machine Learning Paper Reading`;
 
 export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
@@ -27,14 +39,17 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
   todayKey,
 }) => {
   const [rawText, setRawText] = useState(SAMPLE_OUTLINE);
+  const [bypassFeedback, setBypassFeedback] = useState<string | null>(null);
+
+  const baseDate = useMemo(() => new Date(), []);
 
   const parsed = useMemo(() => {
-    return parseRawCourseOutline(rawText);
-  }, [rawText]);
+    return parseRawCourseOutline(rawText, baseDate);
+  }, [rawText, baseDate]);
 
   if (!isOpen) return null;
 
-  const handleAppend = () => {
+  const handleDistribute = () => {
     if (!isImporterUnlocked) {
       onOpenAddOns();
       return;
@@ -42,23 +57,24 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
 
     if (parsed.tasks.length === 0) return;
 
+    // Create tasks with their natural parsed multi-day deadlineDates
     const newTasks: WorkTask[] = parsed.tasks.map((item, idx) => ({
       id: `task-imported-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
       title: item.title,
-      description: `Imported from course notes outline (${item.durationMinutes}m total)`,
+      description: `Imported outline (${item.durationMinutes}m total, deadline: ${item.deadlineLabel})`,
       estimatedMinutes: item.durationMinutes,
       completedMinutes: 0,
-      deadlineDate: todayKey,
+      deadlineDate: item.deadlineDate, // Distributed deadline from natural syntax!
       category: 'academic',
       color: 'indigo',
-      priority: 'high',
+      priority: item.relativeDays <= 1 ? 'high' : 'medium',
       status: 'active',
       createdAt: new Date().toISOString(),
     }));
 
     onImportTasks(
       newTasks,
-      `Appended ${newTasks.length} tasks (${parsed.totalChunks} focus blocks) directly to today's cadence.`
+      `✨ Distributed ${newTasks.length} topics (${parsed.totalChunks} focus blocks) across multi-day schedule.`
     );
 
     onClose();
@@ -69,6 +85,14 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
       window.open(PRO_CHECKOUT_URL, '_blank', 'noopener,noreferrer');
     } catch {
       window.location.href = PRO_CHECKOUT_URL;
+    }
+  };
+
+  const handleQuickBypass = () => {
+    const res = applyBypassCode('test-importer');
+    if (res.success) {
+      setBypassFeedback('✨ Cadence Pro unlocked!');
+      setTimeout(() => setBypassFeedback(null), 3000);
     }
   };
 
@@ -104,10 +128,18 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
           </button>
         </div>
 
-        {/* Informative Guidance */}
-        <p className="text-xs font-serif text-stone-600 leading-relaxed">
-          Paste your syllabus outline or course notes below. Durations like <code className="bg-stone-200/70 px-1 py-0.5 rounded text-stone-800">90m</code>, <code className="bg-stone-200/70 px-1 py-0.5 rounded text-stone-800">2h</code>, or <code className="bg-stone-200/70 px-1 py-0.5 rounded text-stone-800">(45m)</code> are automatically parsed and sliced into cognitive 30-min chunks. Unspecified lines default to 30m.
-        </p>
+        {/* Informative Guidance & Natural Syntax Help */}
+        <div className="space-y-1.5 text-xs font-serif text-stone-600 leading-relaxed bg-stone-100/70 p-3 rounded-2xl border border-stone-200/80">
+          <p>
+            Paste your syllabus outline or course notes. Supports natural durations (<code className="bg-white px-1 py-0.5 rounded border border-stone-200 text-stone-800 font-mono text-[11px]">90m</code>, <code className="bg-white px-1 py-0.5 rounded border border-stone-200 text-stone-800 font-mono text-[11px]">2h</code>, <code className="bg-white px-1 py-0.5 rounded border border-stone-200 text-stone-800 font-mono text-[11px]">(45m)</code>) and optional deadline tags:
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 pt-1 font-mono text-[11px] text-stone-700">
+            <div>• <code className="text-indigo-700 font-semibold">@ tomorrow</code></div>
+            <div>• <code className="text-indigo-700 font-semibold">@ Friday</code></div>
+            <div>• <code className="text-indigo-700 font-semibold">@ in 3 days</code></div>
+            <div>• No tag <span className="text-stone-400 font-serif">→ defaults to 2 days</span></div>
+          </div>
+        </div>
 
         {/* Text Input Area */}
         <div className="space-y-1.5">
@@ -118,20 +150,20 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
             rows={5}
             value={rawText}
             onChange={e => setRawText(e.target.value)}
-            placeholder="e.g.&#10;Calculus Review - 90m&#10;Lab Report 2h&#10;Reaction Mechanisms (45m)"
+            placeholder="e.g.&#10;Calculus Review - 90m @ tomorrow&#10;Lab Report 2h @ Friday&#10;Organic Chemistry Mechanisms (45m) @ in 3 days&#10;Machine Learning Paper Reading"
             className="w-full px-3.5 py-2.5 text-xs sm:text-sm font-mono bg-white border border-stone-200/90 rounded-2xl focus:outline-hidden focus:ring-1 focus:ring-stone-900 text-stone-900 placeholder:text-stone-400 resize-y"
           />
         </div>
 
-        {/* Live Parsing Preview */}
-        <div className="space-y-2 p-3.5 rounded-2xl bg-white/80 border border-stone-200/80 shadow-2xs">
+        {/* Live Multi-Day Distribution Preview */}
+        <div className="space-y-2.5 p-3.5 rounded-2xl bg-white/80 border border-stone-200/80 shadow-2xs">
           <div className="flex items-center justify-between text-xs font-serif">
             <span className="font-semibold text-stone-800 flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Live 30-Minute Slicing Preview:</span>
+              <span>Multi-Day Schedule Distribution Preview:</span>
             </span>
-            <span className="font-mono text-stone-600">
-              {parsed.tasks.length} topics · {parsed.totalDurationMinutes}m total · <strong className="text-stone-900">{parsed.totalChunks} chunks</strong>
+            <span className="font-mono text-stone-600 text-[11px]">
+              {parsed.tasks.length} topics · {parsed.totalDurationMinutes}m · <strong className="text-stone-900">{parsed.totalChunks} focus chunks</strong>
             </span>
           </div>
 
@@ -140,25 +172,40 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
               Enter outline lines above to preview parsed tasks.
             </div>
           ) : (
-            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+            <div className="space-y-2.5 max-h-52 overflow-y-auto pr-1">
               {parsed.tasks.map((task, idx) => (
-                <div key={idx} className="p-2.5 rounded-xl bg-stone-50 border border-stone-200/60 text-xs font-serif space-y-1.5">
+                <div key={idx} className="p-2.5 rounded-xl bg-stone-50 border border-stone-200/70 text-xs font-serif space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-stone-900">{task.title}</span>
-                    <span className="font-mono text-[11px] text-stone-600 bg-stone-200/80 px-2 py-0.5 rounded-md">
-                      {task.durationMinutes}m ({task.chunkCount} × 30m)
-                    </span>
+                    <span className="font-medium text-stone-900 truncate">{task.title}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="inline-flex items-center gap-1 font-mono text-[10px] bg-amber-100/80 text-amber-900 px-2 py-0.5 rounded-md border border-amber-200">
+                        <Calendar className="w-2.5 h-2.5 text-amber-700" />
+                        <span>due: {task.deadlineLabel}</span>
+                      </span>
+                      <span className="font-mono text-[10px] text-stone-600 bg-stone-200/70 px-2 py-0.5 rounded-md">
+                        {task.durationMinutes}m ({task.chunkCount} × 30m)
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Sliced chunk chips */}
-                  <div className="flex flex-wrap gap-1">
-                    {task.chunks.map(chunk => (
+                  {/* Multi-day Landing Distribution Chips */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    {task.chunks.map((chunk, cIdx) => (
                       <span 
                         key={chunk.chunkNumber}
-                        className="inline-flex items-center gap-1 text-[10px] font-mono bg-white px-2 py-0.5 rounded border border-stone-200 text-stone-700"
+                        className={`inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded border transition-colors ${
+                          chunk.plannedDayLabel === 'Today'
+                            ? 'bg-emerald-50 text-emerald-900 border-emerald-200 font-medium'
+                            : chunk.plannedDayLabel === 'Tomorrow'
+                            ? 'bg-blue-50 text-blue-900 border-blue-200'
+                            : 'bg-white text-stone-700 border-stone-200'
+                        }`}
                       >
                         <Clock className="w-2.5 h-2.5 text-stone-400" />
-                        <span>Part {chunk.chunkNumber}/{chunk.totalChunks} ({chunk.durationMinutes}m)</span>
+                        <span>Part {chunk.chunkNumber}: {chunk.plannedDayLabel}</span>
+                        {cIdx < task.chunks.length - 1 && (
+                          <span className="text-stone-300 ml-0.5" aria-hidden="true">|</span>
+                        )}
                       </span>
                     ))}
                   </div>
@@ -179,18 +226,33 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
                     {PRO_ADDON.name}
                   </strong>
                   <p className="text-[11px] text-amber-900/90">
-                    Pricing: $4 / month or $24 / year (Save 50% — 6 Months Free). Instant 1-tap slicing and interleaving into your active daylight cadence.
+                    Pricing: $4 / month or $24 / year (Save 50% — 6 Months Free). Instant 1-tap slicing and interleaving across your active multi-day schedule.
                   </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={handleOpenCheckout}
-                className="shrink-0 px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-serif text-xs font-medium inline-flex items-center gap-1 shadow-xs transition-all active:scale-95 cursor-pointer"
+                className="shrink-0 px-3.5 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-serif text-xs font-medium inline-flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer"
               >
                 <span>Unlock Pro</span>
                 <ExternalLink className="w-3 h-3 opacity-80" />
               </button>
+            </div>
+
+            {/* Developer Bypass Link */}
+            <div className="pt-1 border-t border-amber-200/60 flex items-center justify-between text-[11px] text-amber-800">
+              <button
+                type="button"
+                onClick={handleQuickBypass}
+                className="hover:text-amber-950 underline decoration-amber-400 font-mono cursor-pointer inline-flex items-center gap-1"
+              >
+                <KeyRound className="w-3 h-3 text-amber-700" />
+                <span>Developer Bypass: Click to unlock with test-importer</span>
+              </button>
+              {bypassFeedback && (
+                <span className="font-serif font-semibold text-emerald-800">{bypassFeedback}</span>
+              )}
             </div>
           </div>
         )}
@@ -208,7 +270,7 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
           <button
             type="button"
             disabled={parsed.tasks.length === 0}
-            onClick={handleAppend}
+            onClick={handleDistribute}
             className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-serif font-medium rounded-xl transition-all shadow-xs active:scale-[0.98] cursor-pointer min-h-[42px] ${
               !isImporterUnlocked
                 ? 'bg-amber-400 hover:bg-amber-300 text-stone-950'
@@ -218,12 +280,12 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
             {!isImporterUnlocked ? (
               <>
                 <Lock className="w-3.5 h-3.5" />
-                <span>Unlock Pro to Append to Today ({parsed.totalChunks} blocks)</span>
+                <span>Unlock Pro to Distribute Across Schedule ({parsed.totalChunks} blocks)</span>
               </>
             ) : (
               <>
                 <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Append to Today's Cadence ({parsed.totalChunks} blocks)</span>
+                <span>Distribute Across Schedule ({parsed.totalChunks} blocks)</span>
               </>
             )}
           </button>
