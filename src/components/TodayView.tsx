@@ -21,7 +21,7 @@ import { ScheduledSlot, LifeEvent, WorkTask, ScheduleSettings, SquadSharePayload
 import { formatDateKey, addDays } from '../utils/scheduler';
 import { formatChunkTitle, formatRecurringDaysShort, formatEventTimeSpan, formatBufferLabel } from '../utils/format';
 import { InboundSquadRadarCard } from './InboundSquadRadarCard';
-import { RebalanceConfirmModal } from './RebalanceConfirmModal';
+import { CognitiveTriageModal } from './CognitiveTriageModal';
 
 interface TodayViewProps {
   todayKey: string;
@@ -41,6 +41,7 @@ interface TodayViewProps {
   onPeekTomorrow: () => void;
   onToggleWhatToBring: (eventId: string, itemId: string) => void;
   onRebalance: () => void;
+  onApplyTriage?: (updatedTasks: WorkTask[], rebalancedSlots: ScheduledSlot[], toastMessage: string) => void;
   onMatchDaylight?: (friendBlock: SquadFocusBlock) => void;
   onDismissInboundSquad?: () => void;
 }
@@ -63,6 +64,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
   onPeekTomorrow,
   onToggleWhatToBring,
   onRebalance,
+  onApplyTriage,
   onMatchDaylight,
   onDismissInboundSquad,
 }) => {
@@ -715,11 +717,15 @@ export const TodayView: React.FC<TodayViewProps> = ({
         </div>
       )}
 
-      {/* Rebalance Confirmation Modal */}
-      <RebalanceConfirmModal
+      {/* Cognitive Triage & Deferral Re-alignment Modal */}
+      <CognitiveTriageModal
         isOpen={isRebalanceConfirmOpen}
         onClose={() => setIsRebalanceConfirmOpen(false)}
-        onConfirm={onRebalance}
+        tasks={tasks}
+        events={events}
+        slots={slots}
+        settings={settings}
+        onApplyTriage={onApplyTriage || ((_t, _s) => onRebalance())}
       />
     </div>
   );

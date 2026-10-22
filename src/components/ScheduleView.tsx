@@ -25,6 +25,7 @@ import {
 import { ScheduledSlot, LifeEvent, WorkTask, ScheduleSettings, DayMode } from '../types';
 import { formatDateKey, addDays, parseDateKey } from '../utils/scheduler';
 import { formatChunkTitle, isEventOnDate, formatRecurringDaysShort, formatEventTimeSpan, formatBufferLabel } from '../utils/format';
+import { CognitiveTriageModal } from './CognitiveTriageModal';
 
 interface ScheduleViewProps {
   todayKey: string;
@@ -38,6 +39,7 @@ interface ScheduleViewProps {
   onStartFocus: (slot: ScheduledSlot) => void;
   onToggleWhatToBring: (eventId: string, itemId: string) => void;
   onRebalance: () => void;
+  onApplyTriage?: (updatedTasks: WorkTask[], rebalancedSlots: ScheduledSlot[], toastMessage: string) => void;
   onSetDateSpecificMode: (dateKey: string, mode: DayMode | null) => void;
   onOpenCourseTemplate?: () => void;
 }
@@ -56,10 +58,12 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   onStartFocus,
   onToggleWhatToBring,
   onRebalance,
+  onApplyTriage,
   onSetDateSpecificMode,
   onOpenCourseTemplate,
 }) => {
   const [selectedDateKey, setSelectedDateKey] = useState<string>(todayKey);
+  const [isTriageOpen, setIsTriageOpen] = useState(false);
   const [currentMonthDate, setCurrentMonthDate] = useState<Date>(() => {
     const [y, m, d] = todayKey.split('-').map(Number);
     return new Date(y, m - 1, 1);
@@ -259,8 +263,8 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
           )}
 
           <button
-            onClick={onRebalance}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-serif text-stone-600 hover:text-stone-900 bg-white/80 border border-stone-200/80 rounded-xl hover:bg-stone-100 transition-colors shadow-2xs"
+            onClick={() => setIsTriageOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-serif text-stone-600 hover:text-stone-900 bg-white/80 border border-stone-200/80 rounded-xl hover:bg-stone-100 transition-colors shadow-2xs cursor-pointer"
             title="Auto-rebalance all tasks across horizon"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -902,6 +906,17 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* Cognitive Triage & Deferral Modal */}
+      <CognitiveTriageModal
+        isOpen={isTriageOpen}
+        onClose={() => setIsTriageOpen(false)}
+        tasks={tasks}
+        events={events}
+        slots={slots}
+        settings={settings}
+        onApplyTriage={onApplyTriage || ((_t, _s) => onRebalance())}
+      />
     </div>
   );
 };

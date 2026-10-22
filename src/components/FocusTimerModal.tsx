@@ -24,11 +24,17 @@ import {
   playGentleBell, 
   startAmbientSound, 
   stopAmbientSound, 
+  startTrack,
+  stopTrack,
+  setTrackVolume,
+  getTrackVolumes,
   getMasterVolume, 
   setMasterVolume, 
   getMasterSoundscape, 
   setMasterSoundscape,
-  NatureSoundType 
+  NatureSoundType,
+  ActiveNatureTrack,
+  MultiTrackVolumes
 } from '../utils/audio';
 import { formatChunkTitle, cleanTaskTitle } from '../utils/format';
 
@@ -65,7 +71,13 @@ export const FocusTimerModal: React.FC<FocusTimerModalProps> = ({
   const [totalSeconds, setTotalSeconds] = useState(initialDurationSeconds);
   const [secondsRemaining, setSecondsRemaining] = useState(initialDurationSeconds);
   const [isActive, setIsActive] = useState(true);
-  const [ambientSound, setAmbientSound] = useState<NatureSoundType>(() => getMasterSoundscape());
+  
+  // Multi-track active sounds and individual fader volumes
+  const [activeTracks, setActiveTracks] = useState<ActiveNatureTrack[]>(() => {
+    const primary = getMasterSoundscape();
+    return primary !== 'none' ? [primary] : [];
+  });
+  const [trackVolumes, setTrackVolumes] = useState<MultiTrackVolumes>(() => getTrackVolumes());
   const [masterVolume, setMasterVolState] = useState<number>(() => getMasterVolume());
   const [mantraIndex, setMantraIndex] = useState(0);
   const [hasWakeLock, setHasWakeLock] = useState(false);
@@ -146,23 +158,20 @@ export const FocusTimerModal: React.FC<FocusTimerModalProps> = ({
     };
   }, [slot?.id, initialMode]);
 
-  // Ambient sound handler: runs strictly while focus/ramp_up timer is active
+  // Ambient sound handler: runs active tracks while focus/ramp_up timer is active
   useEffect(() => {
-    if (stopAmbientRef.current) {
-      stopAmbientRef.current(0.4);
-      stopAmbientRef.current = null;
-    }
-
-    if (isActive && mode !== 'break' && ambientSound !== 'none') {
-      stopAmbientRef.current = startAmbientSound(ambientSound);
+    if (isActive && mode !== 'break' && activeTracks.length > 0) {
+      activeTracks.forEach(track => {
+        startTrack(track, trackVolumes[track]);
+      });
     } else {
-      stopAmbientSound(0.6);
+      stopAmbientSound(0.5);
     }
 
     return () => {
       stopAmbientSound(0.4);
     };
-  }, [ambientSound, isActive, mode]);
+  }, [activeTracks, isActive, mode]);
 
   // Timer Tick
   useEffect(() => {
@@ -238,9 +247,31 @@ export const FocusTimerModal: React.FC<FocusTimerModalProps> = ({
     setMasterVolume(clamped);
   };
 
-  const handleSelectSoundscape = (type: NatureSoundType) => {
-    setAmbientSound(type);
-    setMasterSoundscape(type);
+  const handleToggleTrack = (track: ActiveNatureTrack) => {
+    if (activeTracks.includes(track)) {
+      setActiveTracks([]);
+      stopAmbientSound(0.4);
+      setMasterSoundscape('none');
+    } else {
+      stopAmbientSound(0.4);
+      setActiveTracks([track]);
+      setMasterSoundscape(track);
+      if (isActive && mode !== 'break') {
+        startTrack(track, masterVolume);
+      }
+    }
+  };
+
+  const handleMuteAll = () => {
+    setActiveTracks([]);
+    stopAmbientSound(0.4);
+    setMasterSoundscape('none');
+  };
+
+  const handleTrackVolumeChange = (track: ActiveNatureTrack, vol: number) => {
+    const clamped = Math.max(0, Math.min(1, vol));
+    setTrackVolumes(prev => ({ ...prev, [track]: clamped }));
+    setTrackVolume(track, clamped);
   };
 
   const handleCompleteChunk = () => {
@@ -467,83 +498,93 @@ export const FocusTimerModal: React.FC<FocusTimerModalProps> = ({
           </div>
         )}
 
-        {/* Procedural Nature Soundscape Generator & Master Volume Control (0 KB Downloads) */}
-        <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3 max-w-2xl mx-auto">
-          {/* Subtle audio selector: [Mute] [Ocean Waves] [Rainfall] [Brook Water] */}
-          <div className="p-1 bg-stone-900/90 border border-stone-800/90 rounded-2xl sm:rounded-full inline-flex flex-wrap items-center justify-center gap-1 shadow-inner max-w-full">
-            <button
-              onClick={() => handleSelectSoundscape('none')}
-              className={`px-3 py-1.5 rounded-xl sm:rounded-full transition-all text-xs font-serif cursor-pointer ${
-                ambientSound === 'none'
-                  ? 'bg-stone-800 text-white font-medium border border-stone-700 shadow-2xs'
-                  : 'text-stone-400 hover:text-stone-200'
-              }`}
-            >
-              Mute
-            </button>
-            <button
-              onClick={() => handleSelectSoundscape('waves')}
-              className={`px-3 py-1.5 rounded-xl sm:rounded-full transition-all text-xs font-serif cursor-pointer inline-flex items-center gap-1.5 ${
-                ambientSound === 'waves'
-                  ? 'bg-emerald-950 text-emerald-200 border border-emerald-800/70 font-semibold shadow-2xs'
-                  : 'text-stone-400 hover:text-stone-200'
-              }`}
-            >
-              <Waves className="w-3 h-3 text-emerald-400" />
-              <span>Ocean Waves</span>
-            </button>
-            <button
-              onClick={() => handleSelectSoundscape('rain')}
-              className={`px-3 py-1.5 rounded-xl sm:rounded-full transition-all text-xs font-serif cursor-pointer inline-flex items-center gap-1.5 ${
-                ambientSound === 'rain'
-                  ? 'bg-emerald-950 text-emerald-200 border border-emerald-800/70 font-semibold shadow-2xs'
-                  : 'text-stone-400 hover:text-stone-200'
-              }`}
-            >
-              <CloudRain className="w-3 h-3 text-emerald-400" />
-              <span>Rainfall</span>
-            </button>
-            <button
-              onClick={() => handleSelectSoundscape('brook')}
-              className={`px-3 py-1.5 rounded-xl sm:rounded-full transition-all text-xs font-serif cursor-pointer inline-flex items-center gap-1.5 ${
-                ambientSound === 'brook'
-                  ? 'bg-emerald-950 text-emerald-200 border border-emerald-800/70 font-semibold shadow-2xs'
-                  : 'text-stone-400 hover:text-stone-200'
-              }`}
-            >
-              <Wind className="w-3 h-3 text-emerald-400" />
-              <span>Brook Water</span>
-            </button>
-          </div>
+        {/* Procedural Nature Soundscape Generator & Multi-Track Mixer Control (0 KB Downloads) */}
+        <div className="mt-6 flex flex-col items-center justify-center gap-3 max-w-2xl mx-auto">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full">
+            {/* Audio Track Selectors */}
+            <div className="p-1 bg-stone-900/90 border border-stone-800/90 rounded-2xl sm:rounded-full inline-flex flex-wrap items-center justify-center gap-1 shadow-inner max-w-full">
+              <button
+                type="button"
+                onClick={handleMuteAll}
+                className={`px-3 py-1.5 rounded-xl sm:rounded-full transition-all text-xs font-serif cursor-pointer ${
+                  activeTracks.length === 0
+                    ? 'bg-stone-800 text-white font-medium border border-stone-700 shadow-2xs'
+                    : 'text-stone-400 hover:text-stone-200'
+                }`}
+              >
+                Mute
+              </button>
 
-          {/* Master Volume Slider (0% to 100%, default 75%) */}
-          <div className="flex items-center gap-2 text-xs font-serif text-stone-300 bg-stone-900/90 border border-stone-800/90 px-3.5 py-1.5 rounded-2xl sm:rounded-full shadow-inner">
-            <button
-              onClick={() => handleVolumeChange(masterVolume > 0 ? 0 : 0.75)}
-              className="text-stone-400 hover:text-stone-200 transition-colors cursor-pointer"
-              title={masterVolume === 0 ? 'Unmute' : 'Mute master audio'}
-              aria-label={masterVolume === 0 ? 'Unmute' : 'Mute master audio'}
-            >
-              {masterVolume === 0 ? (
-                <VolumeX className="w-3.5 h-3.5 text-stone-500" />
-              ) : (
-                <Volume2 className="w-3.5 h-3.5 text-stone-300" />
-              )}
-            </button>
-            <input
-              type="range"
-              min="0"
-              max="1"
-              step="0.05"
-              value={masterVolume}
-              onChange={e => handleVolumeChange(parseFloat(e.target.value))}
-              className="w-20 sm:w-24 h-1.5 bg-stone-800 accent-emerald-500 rounded-lg cursor-pointer"
-              title={`Master Volume: ${Math.round(masterVolume * 100)}%`}
-              aria-label="Master volume slider"
-            />
-            <span className="font-mono text-[11px] text-stone-400 w-8 text-right tabular-nums">
-              {Math.round(masterVolume * 100)}%
-            </span>
+              <button
+                type="button"
+                onClick={() => handleToggleTrack('waves')}
+                className={`px-3 py-1.5 rounded-xl sm:rounded-full transition-all text-xs font-serif cursor-pointer inline-flex items-center gap-1.5 ${
+                  activeTracks.includes('waves')
+                    ? 'bg-emerald-950 text-emerald-200 border border-emerald-800/70 font-semibold shadow-2xs'
+                    : 'text-stone-400 hover:text-stone-200'
+                }`}
+              >
+                <Waves className="w-3 h-3 text-emerald-400" />
+                <span>Ocean Waves</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleToggleTrack('rain')}
+                className={`px-3 py-1.5 rounded-xl sm:rounded-full transition-all text-xs font-serif cursor-pointer inline-flex items-center gap-1.5 ${
+                  activeTracks.includes('rain')
+                    ? 'bg-emerald-950 text-emerald-200 border border-emerald-800/70 font-semibold shadow-2xs'
+                    : 'text-stone-400 hover:text-stone-200'
+                }`}
+              >
+                <CloudRain className="w-3 h-3 text-emerald-400" />
+                <span>Rainfall</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleToggleTrack('brook')}
+                className={`px-3 py-1.5 rounded-xl sm:rounded-full transition-all text-xs font-serif cursor-pointer inline-flex items-center gap-1.5 ${
+                  activeTracks.includes('brook')
+                    ? 'bg-emerald-950 text-emerald-200 border border-emerald-800/70 font-semibold shadow-2xs'
+                    : 'text-stone-400 hover:text-stone-200'
+                }`}
+              >
+                <Wind className="w-3 h-3 text-emerald-400" />
+                <span>Brook Water</span>
+              </button>
+            </div>
+
+            {/* Master Volume Slider (0% to 100%, default 75%) */}
+            <div className="flex items-center gap-2 text-xs font-serif text-stone-300 bg-stone-900/90 border border-stone-800/90 px-3.5 py-1.5 rounded-2xl sm:rounded-full shadow-inner">
+              <button
+                type="button"
+                onClick={() => handleVolumeChange(masterVolume > 0 ? 0 : 0.75)}
+                className="text-stone-400 hover:text-stone-200 transition-colors cursor-pointer"
+                title={masterVolume === 0 ? 'Unmute' : 'Mute master audio'}
+                aria-label={masterVolume === 0 ? 'Unmute' : 'Mute master audio'}
+              >
+                {masterVolume === 0 ? (
+                  <VolumeX className="w-3.5 h-3.5 text-stone-500" />
+                ) : (
+                  <Volume2 className="w-3.5 h-3.5 text-stone-300" />
+                )}
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={masterVolume}
+                onChange={e => handleVolumeChange(parseFloat(e.target.value))}
+                className="w-20 sm:w-24 h-1.5 bg-stone-800 accent-emerald-500 rounded-lg cursor-pointer"
+                title={`Master Volume: ${Math.round(masterVolume * 100)}%`}
+                aria-label="Master volume slider"
+              />
+              <span className="font-mono text-[11px] text-stone-400 w-8 text-right tabular-nums">
+                {Math.round(masterVolume * 100)}%
+              </span>
+            </div>
           </div>
         </div>
 

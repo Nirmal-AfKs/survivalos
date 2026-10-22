@@ -34,7 +34,9 @@ const BUFFER_BEFORE_OPTIONS = [
   { value: 60, label: '1 hour · Transit & wind-down' },
   { value: 90, label: '1.5 hours · Distance commute' },
   { value: 120, label: '2 hours · Heavy prep / long journey' },
+  { value: 150, label: '2.5 hours · Extended commute' },
   { value: 180, label: '3 hours · Full travel corridor' },
+  { value: 240, label: '4 hours · Deep wind-down / travel prep' },
 ];
 
 const BUFFER_AFTER_OPTIONS = [
@@ -45,7 +47,9 @@ const BUFFER_AFTER_OPTIONS = [
   { value: 60, label: '1 hour · Travel home & meal break' },
   { value: 90, label: '1.5 hours · Decompress & dinner' },
   { value: 120, label: '2 hours · Full decompression & rest' },
+  { value: 150, label: '2.5 hours · Evening buffer' },
   { value: 180, label: '3 hours · Extended recovery' },
+  { value: 240, label: '4 hours · Complete rest until next day' },
 ];
 
 const CATEGORIES = ['Writing', 'Study', 'Design', 'Code', 'Deep Work', 'Life', 'Reading'];
@@ -489,22 +493,58 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
             </div>
 
             {/* Work Protection Buffers Before & After Event */}
-            <div className="space-y-3 p-3.5 rounded-2xl bg-amber-50/60 border border-amber-200/90 shadow-2xs">
-              <div className="flex items-center gap-1.5 text-xs font-serif font-semibold text-stone-800">
-                <Shield className="w-3.5 h-3.5 text-amber-700" />
-                <span>Focus Protection Buffers (Stop Before & Resume After)</span>
+            <div className="space-y-3 p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200/90 shadow-2xs">
+              <div className="flex items-center gap-1.5 text-xs font-serif font-semibold text-stone-900">
+                <Shield className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                <span>Focus Protection Corridors (Reliable Workflow Planning)</span>
               </div>
+              <p className="text-[11px] text-stone-600 font-serif leading-relaxed">
+                Reserve dedicated time before the event to stop work and prepare, and specify when you can return to normal work chunks afterward. Cadence ensures no work chunks are scheduled here.
+              </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 {/* Wind-Down Before Buffer */}
-                <div>
-                  <label className="block text-[11px] font-serif text-stone-700 mb-1">
-                    Stop work before event (Prep / Commute):
-                  </label>
+                <div className="space-y-1.5 bg-white/80 p-2.5 rounded-xl border border-amber-200/60">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-serif font-medium text-stone-800">
+                      Stop work before event:
+                    </label>
+                    <span className="text-[11px] font-mono font-bold text-amber-900">
+                      {bufferBeforeMinutes === 0 ? '0m' : bufferBeforeMinutes < 60 ? `${bufferBeforeMinutes}m` : `${bufferBeforeMinutes / 60}h`}
+                    </span>
+                  </div>
+
+                  {/* 1-Tap Quick Preset Chips */}
+                  <div className="flex flex-wrap gap-1">
+                    {[
+                      { label: '0m', val: 0 },
+                      { label: '15m', val: 15 },
+                      { label: '30m', val: 30 },
+                      { label: '45m', val: 45 },
+                      { label: '1h', val: 60 },
+                      { label: '1.5h', val: 90 },
+                      { label: '2h', val: 120 },
+                      { label: '3h', val: 180 },
+                    ].map(chip => (
+                      <button
+                        key={chip.val}
+                        type="button"
+                        onClick={() => setBufferBeforeMinutes(chip.val)}
+                        className={`px-2 py-0.5 text-[10px] font-serif rounded-md border transition-all cursor-pointer ${
+                          bufferBeforeMinutes === chip.val
+                            ? 'bg-stone-900 text-white border-stone-900 font-medium shadow-2xs'
+                            : 'bg-white text-stone-600 hover:bg-stone-100 border-stone-200'
+                        }`}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+
                   <select
                     value={bufferBeforeMinutes}
                     onChange={e => setBufferBeforeMinutes(Number(e.target.value))}
-                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-stone-200/90 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-stone-900 text-stone-800 font-serif"
+                    className="w-full px-2 py-1 text-xs bg-white border border-stone-200/90 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-stone-900 text-stone-800 font-serif"
                   >
                     {BUFFER_BEFORE_OPTIONS.map(opt => (
                       <option key={opt.value} value={opt.value}>
@@ -512,20 +552,54 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
                       </option>
                     ))}
                   </select>
-                  <div className="text-[10px] text-stone-500 font-serif pt-1">
-                    Focus stops by <strong className="text-stone-800 font-mono">{workPausesAt}</strong>
+
+                  <div className="text-[10px] text-stone-500 font-serif">
+                    Focus stops by <strong className="text-stone-900 font-mono">{workPausesAt}</strong>
                   </div>
                 </div>
 
                 {/* Recovery After Buffer */}
-                <div>
-                  <label className="block text-[11px] font-serif text-stone-700 mb-1">
-                    Resume workflow after (Recovery / Return):
-                  </label>
+                <div className="space-y-1.5 bg-white/80 p-2.5 rounded-xl border border-amber-200/60">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-serif font-medium text-stone-800">
+                      Resume workflow after:
+                    </label>
+                    <span className="text-[11px] font-mono font-bold text-amber-900">
+                      {bufferAfterMinutes === 0 ? '0m' : bufferAfterMinutes < 60 ? `${bufferAfterMinutes}m` : `${bufferAfterMinutes / 60}h`}
+                    </span>
+                  </div>
+
+                  {/* 1-Tap Quick Preset Chips */}
+                  <div className="flex flex-wrap gap-1">
+                    {[
+                      { label: '0m', val: 0 },
+                      { label: '15m', val: 15 },
+                      { label: '30m', val: 30 },
+                      { label: '45m', val: 45 },
+                      { label: '1h', val: 60 },
+                      { label: '1.5h', val: 90 },
+                      { label: '2h', val: 120 },
+                      { label: '3h', val: 180 },
+                    ].map(chip => (
+                      <button
+                        key={chip.val}
+                        type="button"
+                        onClick={() => setBufferAfterMinutes(chip.val)}
+                        className={`px-2 py-0.5 text-[10px] font-serif rounded-md border transition-all cursor-pointer ${
+                          bufferAfterMinutes === chip.val
+                            ? 'bg-stone-900 text-white border-stone-900 font-medium shadow-2xs'
+                            : 'bg-white text-stone-600 hover:bg-stone-100 border-stone-200'
+                        }`}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+
                   <select
                     value={bufferAfterMinutes}
                     onChange={e => setBufferAfterMinutes(Number(e.target.value))}
-                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-stone-200/90 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-stone-900 text-stone-800 font-serif"
+                    className="w-full px-2 py-1 text-xs bg-white border border-stone-200/90 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-stone-900 text-stone-800 font-serif"
                   >
                     {BUFFER_AFTER_OPTIONS.map(opt => (
                       <option key={opt.value} value={opt.value}>
@@ -533,20 +607,21 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
                       </option>
                     ))}
                   </select>
-                  <div className="text-[10px] text-stone-500 font-serif pt-1">
-                    Focus resumes at <strong className="text-stone-800 font-mono">{workResumesAt}</strong>
+
+                  <div className="text-[10px] text-stone-500 font-serif">
+                    Normal chunks resume at <strong className="text-stone-900 font-mono">{workResumesAt}</strong>
                   </div>
                 </div>
               </div>
 
               {/* Protected Corridor Indicator */}
               <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] font-mono text-stone-700 border-t border-amber-200/70">
-                <span className="text-amber-900 font-medium font-serif">Protected window:</span>
-                <span className="bg-white px-2 py-0.5 rounded-md border border-amber-200 text-stone-900">{workPausesAt}</span>
+                <span className="text-amber-900 font-medium font-serif">Blackout corridor:</span>
+                <span className="bg-white px-2 py-0.5 rounded-md border border-amber-200 text-stone-900" title="Work pauses">{workPausesAt}</span>
                 <span className="text-stone-400">→</span>
-                <span className="bg-stone-900 text-white px-2 py-0.5 rounded-md font-semibold">{eventTime} – {eventEndTime}</span>
+                <span className="bg-stone-900 text-white px-2 py-0.5 rounded-md font-semibold" title="Event duration">{eventTime} – {eventEndTime}</span>
                 <span className="text-stone-400">→</span>
-                <span className="bg-white px-2 py-0.5 rounded-md border border-amber-200 text-stone-900">{workResumesAt}</span>
+                <span className="bg-white px-2 py-0.5 rounded-md border border-amber-200 text-stone-900" title="Work resumes">{workResumesAt}</span>
               </div>
             </div>
 

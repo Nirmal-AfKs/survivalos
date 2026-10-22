@@ -38,6 +38,7 @@ export interface WorkTask {
   status: 'active' | 'completed' | 'paused';
   createdAt: string;
   isDefault?: boolean;
+  deferredUntilDate?: string; // 'YYYY-MM-DD' - date before which this task will not be scheduled
 }
 
 export interface ScheduledSlot {

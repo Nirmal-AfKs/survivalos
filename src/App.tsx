@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Sparkles, X, Check } from 'lucide-react';
 import { TopBar } from './components/TopBar';
 import { BottomNav } from './components/BottomNav';
 import { TodayView } from './components/TodayView';
@@ -10,6 +11,9 @@ import { SquadRadarModal } from './components/SquadRadarModal';
 import { FocusTimerModal } from './components/FocusTimerModal';
 import { InstallPromptBanner } from './components/InstallPromptBanner';
 import { CourseTemplateModal } from './components/CourseTemplateModal';
+import { AddOnsModal } from './components/AddOnsModal';
+import { ImportOutlineModal } from './components/ImportOutlineModal';
+import { getAddonStatus, AddonStatus } from './utils/addons';
 const LegalLicenseModal = React.lazy(() => import('./components/LegalLicenseModal').then(m => ({ default: m.LegalLicenseModal })));
 import { 
   WorkTask, 
@@ -58,10 +62,51 @@ export default function App() {
   const [isSquadRadarOpen, setIsSquadRadarOpen] = useState(false);
   const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
   const [isCourseTemplateOpen, setIsCourseTemplateOpen] = useState(false);
+  const [isAddOnsOpen, setIsAddOnsOpen] = useState(false);
+  const [isImportOutlineOpen, setIsImportOutlineOpen] = useState(false);
+  const [addons, setAddons] = useState<AddonStatus>(() => getAddonStatus());
   const [templateNotice, setTemplateNotice] = useState<{ name: string; taskCount: number } | null>(null);
   const [activeFocusSlot, setActiveFocusSlot] = useState<ScheduledSlot | null>(null);
   const [focusTimerMode, setFocusTimerMode] = useState<'focus' | 'ramp_up'>('focus');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const todayKey = formatDateKey(new Date());
+
+  // Automatic Post-Purchase Unlock Detection (?unlocked=true)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search && window.location.search.includes('unlocked=true')) {
+      try {
+        localStorage.setItem('cadence_addon_importer', 'true');
+        const cleanPath = window.location.pathname || '/';
+        window.history.replaceState({}, '', cleanPath);
+        setAddons({ importer: true });
+        setToastMessage("✨ Cadence Pro Unlocked! 1-Click Task & Course Importer is now active.");
+      } catch (err) {
+        console.error('Failed to process unlock parameter:', err);
+      }
+    }
+  }, []);
+
+  // Listen to add-on changes (from storage or other tabs)
+  useEffect(() => {
+    const handleAddonsChanged = () => {
+      setAddons(getAddonStatus());
+    };
+    window.addEventListener('cadence_addons_changed', handleAddonsChanged);
+    window.addEventListener('storage', handleAddonsChanged);
+    return () => {
+      window.removeEventListener('cadence_addons_changed', handleAddonsChanged);
+      window.removeEventListener('storage', handleAddonsChanged);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => {
+        setToastMessage(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
 
   // 1-Click Course / Syllabus Template Engine (Scenario C+ Hyperedge Seeding)
   const handleApplyTemplate = (template: CourseTemplatePayload) => {
@@ -183,6 +228,19 @@ export default function App() {
     const rebalanced = recalculateSchedule(tasks, events, settings, slots, new Date());
     setSlots(rebalanced);
     saveSlots(rebalanced);
+  };
+
+  // Cognitive Triage & Schedule Reflow Execution
+  const handleApplyTriage = (
+    updatedTasks: WorkTask[],
+    rebalancedSlots: ScheduledSlot[],
+    toast: string
+  ) => {
+    setTasks(updatedTasks);
+    saveTasks(updatedTasks);
+    setSlots(rebalancedSlots);
+    saveSlots(rebalancedSlots);
+    setToastMessage(toast);
   };
 
   // Helper to vanish ONLY default/sample items when user begins using Cadence
@@ -459,6 +517,23 @@ export default function App() {
     saveSlots(rebalanced);
   };
 
+  // Import Outline / Course notes callback
+  const handleImportOutlineTasks = (newTasks: WorkTask[], message: string) => {
+    const updatedTasks = [...newTasks, ...tasks];
+    setTasks(updatedTasks);
+    saveTasks(updatedTasks);
+
+    const rebalanced = recalculateSchedule(updatedTasks, events, settings, slots, new Date());
+    setSlots(rebalanced);
+    saveSlots(rebalanced);
+
+    setIsSampleSchedule(false);
+    saveIsSampleSchedule(false);
+
+    setToastMessage(message);
+    setActiveTab('today');
+  };
+
   // Smooth Peek at Tomorrow's Cadence Bridge
   const handlePeekTomorrow = () => {
     setActiveTab('schedule');
@@ -473,6 +548,8 @@ export default function App() {
         onOpenAdd={() => setIsAddOpen(true)}
         onOpenSquadRadar={() => setIsSquadRadarOpen(true)}
         onOpenCourseTemplate={() => setIsCourseTemplateOpen(true)}
+        onOpenAddOns={() => setIsAddOnsOpen(true)}
+        onOpenImportOutline={() => setIsImportOutlineOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -529,6 +606,7 @@ export default function App() {
             onPeekTomorrow={handlePeekTomorrow}
             onToggleWhatToBring={handleToggleWhatToBring}
             onRebalance={handleRebalance}
+            onApplyTriage={handleApplyTriage}
             onMatchDaylight={handleMatchDaylight}
             onDismissInboundSquad={handleDismissInboundSquad}
           />
@@ -550,6 +628,7 @@ export default function App() {
             }}
             onToggleWhatToBring={handleToggleWhatToBring}
             onRebalance={handleRebalance}
+            onApplyTriage={handleApplyTriage}
             onSetDateSpecificMode={handleSetDateSpecificMode}
             onOpenCourseTemplate={() => setIsCourseTemplateOpen(true)}
           />
@@ -660,6 +739,40 @@ export default function App() {
           }}
           breakDurationMinutes={settings.breakIntervalMinutes}
         />
+      )}
+
+      {/* Cadence Pro Modal */}
+      <AddOnsModal
+        isOpen={isAddOnsOpen}
+        onClose={() => setIsAddOnsOpen(false)}
+        onStatusChange={(newStatus) => setAddons(newStatus)}
+      />
+
+      {/* Fast Course Notes / Outline Importer */}
+      <ImportOutlineModal
+        isOpen={isImportOutlineOpen}
+        onClose={() => setIsImportOutlineOpen(false)}
+        isImporterUnlocked={addons.importer}
+        onOpenAddOns={() => setIsAddOnsOpen(true)}
+        onImportTasks={handleImportOutlineTasks}
+        todayKey={todayKey}
+      />
+
+      {/* Clean Re-alignment & Action Toast */}
+      {toastMessage && (
+        <div className="fixed bottom-20 md:bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-3 duration-200 pointer-events-auto">
+          <div className="flex items-center gap-2.5 px-4.5 py-3 rounded-2xl bg-stone-900/95 text-white text-xs sm:text-sm font-serif shadow-2xl border border-stone-800 backdrop-blur-md">
+            <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="tracking-tight">{toastMessage}</span>
+            <button 
+              onClick={() => setToastMessage(null)}
+              className="ml-2 text-stone-400 hover:text-white transition-colors cursor-pointer p-0.5"
+              aria-label="Dismiss toast"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

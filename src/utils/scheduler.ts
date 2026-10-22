@@ -135,6 +135,64 @@ export function getDailySlotTemplates(date: Date, settings: ScheduleSettings, ev
   return slots;
 }
 
+export interface TodayCapacityMetrics {
+  currentClockMinutes: number;
+  currentClockTimeStr: string;
+  totalDaylightSlots: number;
+  completedSlotsCount: number;
+  pastSlotsCount: number;
+  remainingOpenSlotsCount: number;
+  remainingMinutesAvailable: number;
+  totalPendingChunksToday: number;
+  openSlotTemplates: DaySlotTemplate[];
+}
+
+/**
+ * Calculates real-time daylight capacity for today:
+ * Factors out past time, already completed blocks, and focus protection corridors
+ */
+export function calculateTodayCapacity(
+  settings: ScheduleSettings,
+  events: LifeEvent[],
+  existingSlots: ScheduledSlot[],
+  referenceTime: Date = new Date()
+): TodayCapacityMetrics {
+  const todayKey = formatDateKey(referenceTime);
+  const currentClockMinutes = referenceTime.getHours() * 60 + referenceTime.getMinutes();
+  const currentClockTimeStr = minutesToTime(currentClockMinutes);
+
+  // Events on today (including recurring)
+  const todayEvents = events.filter(e => isEventOnDate(e, referenceTime));
+  const allTemplates = getDailySlotTemplates(referenceTime, settings, todayEvents);
+
+  const completedTodaySlots = existingSlots.filter(s => s.date === todayKey && s.isCompleted);
+  const completedSlotTimes = new Set(completedTodaySlots.map(s => s.startTime));
+
+  const pendingTodaySlots = existingSlots.filter(s => s.date === todayKey && !s.isCompleted && !s.isUnscheduled);
+
+  // Remaining open slots: must not be completed, and must start >= currentClockMinutes
+  const openTemplates = allTemplates.filter(t => {
+    if (completedSlotTimes.has(t.startTime)) return false;
+    const slotStartMin = timeToMinutes(t.startTime);
+    return slotStartMin >= currentClockMinutes;
+  });
+
+  const remainingOpenSlotsCount = openTemplates.length;
+  const remainingMinutesAvailable = remainingOpenSlotsCount * settings.focusBlockMinutes;
+
+  return {
+    currentClockMinutes,
+    currentClockTimeStr,
+    totalDaylightSlots: allTemplates.length,
+    completedSlotsCount: completedTodaySlots.length,
+    pastSlotsCount: allTemplates.filter(t => timeToMinutes(t.startTime) < currentClockMinutes).length,
+    remainingOpenSlotsCount,
+    remainingMinutesAvailable,
+    totalPendingChunksToday: pendingTodaySlots.length,
+    openSlotTemplates: openTemplates,
+  };
+}
+
 /**
  * Core Algorithm: Spreads incomplete work across available slots up to deadline buffer.
  * Interleaves tasks to prevent cognitive monotony.
@@ -171,6 +229,10 @@ export function recalculateSchedule(
         rawDeadlineStr = linked.date;
       }
     }
+    // If task has a deferral date that is beyond the current deadline, extend deadline accordingly
+    if (task.deferredUntilDate && task.deferredUntilDate > rawDeadlineStr) {
+      rawDeadlineStr = task.deferredUntilDate;
+    }
 
     const rawDeadlineDate = parseDateKey(rawDeadlineStr);
     let effectiveLastDayDate = rawDeadlineDate;
@@ -183,6 +245,14 @@ export function recalculateSchedule(
         effectiveLastDayDate = new Date(startDate);
       } else {
         effectiveLastDayDate = dayBefore;
+      }
+    }
+
+    // Ensure effective last day is at least the deferral target date
+    if (task.deferredUntilDate) {
+      const deferredDateObj = parseDateKey(task.deferredUntilDate);
+      if (effectiveLastDayDate < deferredDateObj) {
+        effectiveLastDayDate = deferredDateObj;
       }
     }
 
@@ -242,9 +312,11 @@ export function recalculateSchedule(
 
       // Find candidates for this slot:
       // Must be a task that still needs chunks AND where currentDay <= effectiveLastDayDate
+      // AND not deferred until a future date
       const eligibleTasks = taskMeta.filter(t => 
         t.chunksScheduled < t.chunksNeeded && 
-        dayKey <= t.effectiveLastDayKey
+        dayKey <= t.effectiveLastDayKey &&
+        (!t.task.deferredUntilDate || dayKey >= t.task.deferredUntilDate)
       );
 
       if (eligibleTasks.length === 0) {

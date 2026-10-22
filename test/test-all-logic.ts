@@ -3,7 +3,8 @@ import {
   formatDateKey, 
   parseDateKey, 
   addDays, 
-  recalculateSchedule 
+  recalculateSchedule,
+  calculateTodayCapacity
 } from '../src/utils/scheduler';
 import { 
   encodeSquadPayload, 
@@ -46,8 +47,24 @@ import {
   getMasterVolume,
   setMasterVolume,
   getMasterSoundscape,
-  setMasterSoundscape
+  setMasterSoundscape,
+  getTrackVolumes,
+  saveTrackVolume
 } from '../src/utils/audio';
+import {
+  parseRawCourseOutline,
+  parseOutlineLine
+} from '../src/utils/outlineParser';
+import {
+  getAddonStatus,
+  setAddonUnlocked,
+  resetAddonsToFree,
+  applyBypassCode,
+  ADDON_PRICING,
+  PRO_ADDON,
+  PRO_CHECKOUT_URL,
+  checkAndApplyPostPurchaseUnlock
+} from '../src/utils/addons';
 
 // In-memory localStorage mock for node test runner
 const store: Record<string, string> = {};
@@ -802,6 +819,295 @@ it('strictly preserves work blackout buffer corridor before and after life event
   }
 });
 
+// ============================================================
+// 10. REALITY & CAPACITY METRICS CALCULATION
+// ============================================================
+console.log('📌 Testing Daylight Reality & Capacity Calculation:');
+
+it('calculates remaining daylight capacity accurately factoring out past time and completed blocks', () => {
+  const baseDate = new Date(2026, 9, 21, 14, 0); // 14:00 (2:00 PM)
+  const targetDateKey = formatDateKey(baseDate);
+
+  const testSettings: ScheduleSettings = {
+    ...DEFAULT_SETTINGS,
+    dateSpecificModes: { [targetDateKey]: 'fully_home' },
+    fullyHomeDay: {
+      ...DEFAULT_SETTINGS.fullyHomeDay,
+      startHour: '09:00',
+      endHour: '18:00',
+      lunchBreakStart: '12:00',
+      lunchBreakEnd: '13:00',
+      applicableDays: [0, 1, 2, 3, 4, 5, 6],
+    },
+    focusBlockMinutes: 60,
+    breakIntervalMinutes: 0,
+  };
+
+  // Day slots would normally be:
+  // 09:00-10:00, 10:00-11:00, 11:00-12:00, (12-13 lunch), 13:00-14:00, 14:00-15:00, 15:00-16:00, 16:00-17:00, 17:00-18:00
+  // Total = 8 slots across the entire day
+
+  // At 14:00, past slots: 09:00, 10:00, 11:00, 13:00 (4 past slots)
+  // Remaining slots starting at or after 14:00: 14:00, 15:00, 16:00, 17:00 (4 open slots)
+
+  const existingCompletedSlot: ScheduledSlot = {
+    id: 's-comp-1',
+    workTaskId: 't1',
+    workTitle: 'Morning Work',
+    category: 'work',
+    color: 'stone',
+    date: targetDateKey,
+    startTime: '14:00',
+    endTime: '15:00',
+    durationMinutes: 60,
+    isCompleted: true,
+    chunkNumber: 1,
+    totalChunks: 1,
+  };
+
+  const capacity = calculateTodayCapacity(
+    testSettings,
+    [],
+    [existingCompletedSlot],
+    baseDate
+  );
+
+  assert.strictEqual(capacity.totalDaylightSlots, 8);
+  assert.strictEqual(capacity.completedSlotsCount, 1);
+  // Open remaining slots after 14:00 minus the completed 14:00 slot = 3 slots (15:00, 16:00, 17:00)
+  assert.strictEqual(capacity.remainingOpenSlotsCount, 3);
+  assert.strictEqual(capacity.remainingMinutesAvailable, 180);
+});
+
+// ============================================================
+// 11. COGNITIVE TRIAGE DEFERRAL & SCHEDULE REFLOW (EDF)
+// ============================================================
+console.log('📌 Testing Cognitive Triage Deferral & Schedule Reflow:');
+
+it('strictly removes deferred tasks from today and reflows kept tasks with EDF priority', () => {
+  const baseDate = new Date(2026, 9, 21); // Today
+  const todayKey = formatDateKey(baseDate);
+  const tomorrowKey = formatDateKey(addDays(baseDate, 1));
+  const plus3Key = formatDateKey(addDays(baseDate, 3));
+
+  const testSettings: ScheduleSettings = {
+    ...DEFAULT_SETTINGS,
+    dateSpecificModes: { [todayKey]: 'routine_work' },
+    averageDay: {
+      startHour: '18:00',
+      endHour: '20:00', // 2 hours = two 45m blocks
+      applicableDays: [0, 1, 2, 3, 4, 5, 6],
+    },
+    focusBlockMinutes: 45,
+    breakIntervalMinutes: 15,
+  };
+
+  // Task A: Urgent deadline tomorrow, but user deferred to tomorrow during triage
+  const taskA_Deferred: WorkTask = {
+    id: 'task-a',
+    title: 'Deferred Heavy Analysis',
+    category: 'work',
+    deadlineDate: tomorrowKey,
+    deferredUntilDate: tomorrowKey, // Deferred!
+    estimatedMinutes: 45,
+    completedMinutes: 0,
+    color: 'indigo',
+    priority: 'high',
+    status: 'active',
+    createdAt: baseDate.toISOString(),
+  };
+
+  // Task B: Urgent task kept for today
+  const taskB_Kept: WorkTask = {
+    id: 'task-b',
+    title: 'Kept Urgent Revision',
+    category: 'study',
+    deadlineDate: plus3Key,
+    estimatedMinutes: 45,
+    completedMinutes: 0,
+    color: 'emerald',
+    priority: 'high',
+    status: 'active',
+    createdAt: baseDate.toISOString(),
+  };
+
+  const rebalanced = recalculateSchedule(
+    [taskA_Deferred, taskB_Kept],
+    [],
+    testSettings,
+    [],
+    baseDate
+  );
+
+  const todaySlots = rebalanced.filter(s => s.date === todayKey);
+  
+  // Task A must NOT be scheduled today
+  assert.strictEqual(todaySlots.some(s => s.workTaskId === 'task-a'), false, 'Deferred task must not be scheduled today');
+  
+  // Task B must be scheduled today in the open slot
+  assert.strictEqual(todaySlots.some(s => s.workTaskId === 'task-b'), true, 'Kept task must be scheduled today');
+
+  // Task A should be scheduled starting tomorrow
+  const tomorrowSlots = rebalanced.filter(s => s.date === tomorrowKey);
+  assert.strictEqual(tomorrowSlots.some(s => s.workTaskId === 'task-a'), true, 'Deferred task resumes tomorrow');
+});
+
+// ==========================================
+// 10. FAST COURSE NOTES & SYLLABUS REGEX PARSING TESTS
+// ==========================================
+console.log('\n📌 Testing Course Outline Regex & 30m Chunking Engine:');
+
+it('parses "Calculus Review - 90m" into 90m total and 3 30m chunks', () => {
+  const parsed = parseOutlineLine('Calculus Review - 90m');
+  assert.ok(parsed, 'Line should be parsed');
+  assert.strictEqual(parsed!.title, 'Calculus Review');
+  assert.strictEqual(parsed!.durationMinutes, 90);
+  assert.strictEqual(parsed!.chunks.length, 3);
+  assert.strictEqual(parsed!.chunks[0].title, 'Calculus Review (Part 1 of 3)');
+  assert.strictEqual(parsed!.chunks[1].title, 'Calculus Review (Part 2 of 3)');
+  assert.strictEqual(parsed!.chunks[2].title, 'Calculus Review (Part 3 of 3)');
+});
+
+it('parses "Lab Report 2h" into 120m and 4 30m chunks', () => {
+  const parsed = parseOutlineLine('Lab Report 2h');
+  assert.ok(parsed, 'Line should be parsed');
+  assert.strictEqual(parsed!.title, 'Lab Report');
+  assert.strictEqual(parsed!.durationMinutes, 120);
+  assert.strictEqual(parsed!.chunks.length, 4);
+});
+
+it('parses "Organic Chemistry Mechanisms (45m)" into 45m and 2 30m chunks', () => {
+  const parsed = parseOutlineLine('Organic Chemistry Mechanisms (45m)');
+  assert.ok(parsed, 'Line should be parsed');
+  assert.strictEqual(parsed!.title, 'Organic Chemistry Mechanisms');
+  assert.strictEqual(parsed!.durationMinutes, 45);
+  // Math.max(1, Math.ceil(45 / 30)) = 2 chunks
+  assert.strictEqual(parsed!.chunks.length, 2);
+  assert.strictEqual(parsed!.chunks[0].durationMinutes, 30);
+  assert.strictEqual(parsed!.chunks[1].durationMinutes, 15);
+});
+
+it('defaults to 30m when no duration pattern is provided in line', () => {
+  const parsed = parseOutlineLine('Machine Learning Paper Reading');
+  assert.ok(parsed, 'Line should be parsed');
+  assert.strictEqual(parsed!.title, 'Machine Learning Paper Reading');
+  assert.strictEqual(parsed!.durationMinutes, 30);
+  assert.strictEqual(parsed!.chunks.length, 1);
+  assert.strictEqual(parsed!.chunks[0].title, 'Machine Learning Paper Reading');
+});
+
+it('parses mixed multiline syllabus outlines ignoring blank lines and leading bullets', () => {
+  const raw = `
+    * Calculus Review - 90m
+    - Lab Report 2h
+    
+    1. Organic Chemistry Mechanisms (45m)
+    Machine Learning Paper Reading
+  `;
+  const result = parseRawCourseOutline(raw);
+  assert.strictEqual(result.tasks.length, 4);
+  assert.strictEqual(result.totalDurationMinutes, 90 + 120 + 45 + 30); // 285 mins
+  assert.strictEqual(result.totalChunks, 3 + 4 + 2 + 1); // 10 30m chunks
+  assert.strictEqual(result.tasks[0].title, 'Calculus Review');
+  assert.strictEqual(result.tasks[1].title, 'Lab Report');
+  assert.strictEqual(result.tasks[2].title, 'Organic Chemistry Mechanisms');
+  assert.strictEqual(result.tasks[3].title, 'Machine Learning Paper Reading');
+});
+
+// ==========================================
+// 11. CADENCE PRO ADD-ON & LICENSING TESTS
+// ==========================================
+console.log('\n📌 Testing Cadence Pro Importer Licensing, Bypass & Whop Checkout:');
+
+it('starts with Cadence Pro locked in free tier by default', () => {
+  resetAddonsToFree();
+  const status = getAddonStatus();
+  assert.strictEqual(status.importer, false);
+});
+
+it('applies "test-importer" bypass code to unlock Cadence Pro', () => {
+  resetAddonsToFree();
+  const res = applyBypassCode('test-importer');
+  assert.strictEqual(res.success, true);
+  assert.strictEqual(res.unlocked.importer, true);
+  assert.strictEqual(getAddonStatus().importer, true);
+});
+
+it('applies "test-all" bypass code to unlock Cadence Pro', () => {
+  resetAddonsToFree();
+  const res = applyBypassCode('test-all');
+  assert.strictEqual(res.success, true);
+  assert.strictEqual(res.unlocked.importer, true);
+  assert.strictEqual(getAddonStatus().importer, true);
+});
+
+it('rejects invalid or misspelled bypass codes with clean feedback', () => {
+  const res = applyBypassCode('unknown-code-xyz');
+  assert.strictEqual(res.success, false);
+});
+
+it('resets Cadence Pro back to free tier', () => {
+  applyBypassCode('test-all');
+  resetAddonsToFree();
+  const status = getAddonStatus();
+  assert.strictEqual(status.importer, false);
+});
+
+it('contains correct Whop live checkout link and pricing structure', () => {
+  assert.strictEqual(PRO_CHECKOUT_URL, 'https://whop.com/softmarket-2/cadence-pro-course-importer');
+  assert.strictEqual(PRO_ADDON.checkoutUrl, 'https://whop.com/softmarket-2/cadence-pro-course-importer');
+  assert.strictEqual(PRO_ADDON.monthlyPrice, 4);
+  assert.strictEqual(PRO_ADDON.yearlyPrice, 24);
+});
+
+it('detects ?unlocked=true URL param and unlocks Cadence Pro', () => {
+  resetAddonsToFree();
+  // Mock window.location
+  (globalThis as any).window = {
+    location: {
+      search: '?unlocked=true',
+      pathname: '/',
+    },
+    history: {
+      replaceState: (_data: any, _unused: any, url: string) => {
+        (globalThis as any).window.location.pathname = url;
+        (globalThis as any).window.location.search = '';
+      }
+    },
+    dispatchEvent: () => {}
+  };
+
+  const detected = checkAndApplyPostPurchaseUnlock();
+  assert.strictEqual(detected, true);
+  assert.strictEqual(getAddonStatus().importer, true);
+  assert.strictEqual((globalThis as any).window.location.search, '');
+});
+
+// ==========================================
+// 12. MULTI-TRACK ACOUSTIC MIXER VOLUME STATE TESTS
+// ==========================================
+console.log('\n📌 Testing Multi-Track Acoustic Volume Storage:');
+
+it('stores and retrieves individual track volumes correctly', () => {
+  saveTrackVolume('rain', 0.85);
+  saveTrackVolume('waves', 0.40);
+  saveTrackVolume('brook', 0.65);
+
+  const volumes = getTrackVolumes();
+  assert.strictEqual(volumes.rain, 0.85);
+  assert.strictEqual(volumes.waves, 0.40);
+  assert.strictEqual(volumes.brook, 0.65);
+});
+
+it('clamps track volume between 0 and 1', () => {
+  saveTrackVolume('waves', 1.5);
+  assert.strictEqual(getTrackVolumes().waves, 1);
+
+  saveTrackVolume('brook', -0.5);
+  assert.strictEqual(getTrackVolumes().brook, 0);
+});
+
 console.log(`\n🎉 ALL ${passedTests}/${totalTests} TESTS PASSED WITH 100% SUCCESS!`);
+
 
 
