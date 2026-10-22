@@ -69,6 +69,7 @@ import {
   ADDON_PRICING,
   PRO_ADDON,
   PRO_CHECKOUT_URL,
+  WHOP_LIFETIME_CHECKOUT_URL,
   WHOP_ANNUAL_CHECKOUT_URL,
   WHOP_MONTHLY_CHECKOUT_URL,
   checkAndApplyPostPurchaseUnlock
@@ -1296,15 +1297,13 @@ it('resets Cadence Pro back to free tier', () => {
   assert.strictEqual(status.importer, false);
 });
 
-it('contains correct Whop live checkout link and pricing structure', () => {
-  assert.strictEqual(PRO_CHECKOUT_URL, 'https://whop.com/softmarket-2/cadence-pro-course-importer');
-  assert.strictEqual(WHOP_ANNUAL_CHECKOUT_URL, 'https://whop.com/checkout/plan_1Hv3fzf6nWAxP');
-  assert.strictEqual(WHOP_MONTHLY_CHECKOUT_URL, 'https://whop.com/checkout/plan_r9yJOZILo1wsG');
-  assert.strictEqual(PRO_ADDON.checkoutUrl, 'https://whop.com/softmarket-2/cadence-pro-course-importer');
-  assert.strictEqual(PRO_ADDON.annualCheckoutUrl, 'https://whop.com/checkout/plan_1Hv3fzf6nWAxP');
-  assert.strictEqual(PRO_ADDON.monthlyCheckoutUrl, 'https://whop.com/checkout/plan_r9yJOZILo1wsG');
-  assert.strictEqual(PRO_ADDON.monthlyPrice, 4);
-  assert.strictEqual(PRO_ADDON.yearlyPrice, 24);
+it('contains correct Whop live checkout link and single $15 one-time lifetime pricing structure', () => {
+  assert.strictEqual(WHOP_LIFETIME_CHECKOUT_URL, 'https://whop.com/checkout/plan_1Hv3fzf6nWAxP');
+  assert.strictEqual(PRO_CHECKOUT_URL, 'https://whop.com/checkout/plan_1Hv3fzf6nWAxP');
+  assert.strictEqual(PRO_ADDON.checkoutUrl, 'https://whop.com/checkout/plan_1Hv3fzf6nWAxP');
+  assert.strictEqual(PRO_ADDON.price, 15);
+  assert.strictEqual(PRO_ADDON.pricingLabel, '$15 (One-Time)');
+  assert.strictEqual(PRO_ADDON.subcaption, 'Pay once. Unlimited syllabus parsing for your entire degree. Zero subscriptions.');
 });
 
 it('detects ?unlocked=true URL param and unlocks Cadence Pro', () => {

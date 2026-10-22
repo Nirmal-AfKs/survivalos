@@ -11,10 +11,7 @@ import {
 } from 'lucide-react';
 import { parseRawCourseOutline } from '../utils/outlineParser';
 import { WorkTask } from '../types';
-import { 
-  WHOP_ANNUAL_CHECKOUT_URL, 
-  WHOP_MONTHLY_CHECKOUT_URL 
-} from '../utils/addons';
+import { WHOP_LIFETIME_CHECKOUT_URL } from '../utils/addons';
 
 interface ImportOutlineModalProps {
   isOpen: boolean;
@@ -53,7 +50,7 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
 
   const handleDistribute = () => {
     if (!isImporterUnlocked) {
-      handleOpenAnnualCheckout();
+      handleOpenLifetimeCheckout();
       return;
     }
 
@@ -82,19 +79,11 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
     onClose();
   };
 
-  const handleOpenAnnualCheckout = () => {
+  const handleOpenLifetimeCheckout = () => {
     try {
-      window.open(WHOP_ANNUAL_CHECKOUT_URL, '_blank', 'noopener,noreferrer');
+      window.open(WHOP_LIFETIME_CHECKOUT_URL, '_blank', 'noopener,noreferrer');
     } catch {
-      window.location.href = WHOP_ANNUAL_CHECKOUT_URL;
-    }
-  };
-
-  const handleOpenMonthlyCheckout = () => {
-    try {
-      window.open(WHOP_MONTHLY_CHECKOUT_URL, '_blank', 'noopener,noreferrer');
-    } catch {
-      window.location.href = WHOP_MONTHLY_CHECKOUT_URL;
+      window.location.href = WHOP_LIFETIME_CHECKOUT_URL;
     }
   };
 
@@ -218,7 +207,7 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="pt-3 border-t border-stone-200/80 space-y-3">
+        <div className="pt-3 border-t border-stone-200/80 space-y-2">
           {isImporterUnlocked ? (
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
               <button
@@ -239,7 +228,7 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
               </button>
             </div>
           ) : (
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
                 <button
                   type="button"
@@ -250,24 +239,19 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={handleOpenAnnualCheckout}
+                  onClick={handleOpenLifetimeCheckout}
                   className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-serif text-xs sm:text-sm font-medium shadow-sm transition-all active:scale-[0.98] cursor-pointer flex-1 order-1 sm:order-2"
                 >
                   <Lock className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Unlock Pro & Distribute — $24/year (Save 50%)</span>
+                  <span>Unlock Lifetime Importer — $15 (One-Time)</span>
                   <ExternalLink className="w-3.5 h-3.5 opacity-80" />
                 </button>
               </div>
 
-              <div className="flex items-center justify-center px-1 text-xs font-serif">
-                <button
-                  type="button"
-                  onClick={handleOpenMonthlyCheckout}
-                  className="text-stone-500 hover:text-stone-900 underline underline-offset-4 decoration-stone-300 transition-colors cursor-pointer"
-                >
-                  or choose Monthly ($4 / month)
-                </button>
-              </div>
+              {/* Subtle sub-caption below the button */}
+              <p className="text-center text-[11px] font-serif text-stone-500 italic pt-0.5">
+                Pay once. Unlimited syllabus parsing for your entire degree. Zero subscriptions.
+              </p>
             </div>
           )}
         </div>

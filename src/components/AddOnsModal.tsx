@@ -6,13 +6,13 @@ import {
   FileText, 
   ExternalLink,
   Clock,
-  Heart
+  Heart,
+  Lock
 } from 'lucide-react';
 import { 
   getAddonStatus, 
   AddonStatus, 
-  WHOP_ANNUAL_CHECKOUT_URL, 
-  WHOP_MONTHLY_CHECKOUT_URL 
+  WHOP_LIFETIME_CHECKOUT_URL 
 } from '../utils/addons';
 
 interface AddOnsModalProps {
@@ -50,11 +50,11 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
 
   const isUnlocked = status.importer;
 
-  const openCheckout = (url: string) => {
+  const openCheckout = () => {
     try {
-      window.open(url, '_blank', 'noopener,noreferrer');
+      window.open(WHOP_LIFETIME_CHECKOUT_URL, '_blank', 'noopener,noreferrer');
     } catch {
-      window.location.href = url;
+      window.location.href = WHOP_LIFETIME_CHECKOUT_URL;
     }
   };
 
@@ -104,7 +104,7 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
             </p>
           </div>
         ) : (
-          /* Checkout Tier Options */
+          /* Single $15 One-Time Lifetime Pricing */
           <div className="space-y-4">
             <p className="text-xs sm:text-sm font-serif text-stone-600 leading-relaxed">
               Instantly turn course notes, syllabi, and raw outlines into balanced focus chunks distributed across your daylight schedule.
@@ -132,66 +132,47 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
               </div>
             </div>
 
-            {/* 1. Annual Plan (Primary Highlighted Card) */}
+            {/* Single Lifetime $15 Highlighted Card */}
             <div className="relative p-5 rounded-2xl bg-white border-2 border-stone-900 shadow-md space-y-3.5 text-stone-900">
               {/* Highlight Badge */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <Sparkles className="w-4 h-4 text-amber-500 fill-amber-500" />
                   <h3 className="text-base font-serif font-bold text-stone-900">
-                    Annual Pass (Best Value)
+                    Lifetime Sanctuary Pass
                   </h3>
                 </div>
                 <span className="text-[10px] font-sans font-bold uppercase tracking-wider bg-amber-200 text-amber-950 px-2 py-0.5 rounded-full border border-amber-300 shadow-2xs">
-                  Save 50%
+                  One-Time Payment
                 </span>
               </div>
 
               {/* Price Line */}
               <div className="space-y-0.5">
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-serif font-bold text-stone-900">$24</span>
-                  <span className="text-xs font-serif text-stone-500">/ year</span>
-                  <span className="text-xs font-serif text-emerald-800 font-medium ml-1">
-                    (Just $2/month — Save 50% / 6 Months Free)
-                  </span>
+                  <span className="text-3xl font-serif font-bold text-stone-900">$15</span>
+                  <span className="text-xs font-serif text-stone-500">one-time payment</span>
                 </div>
-                <p className="text-[11px] font-serif text-stone-500">
-                  Full 1-year access to the Cadence Pro Course & Outline Importer.
+                <p className="text-[11px] font-serif text-stone-500 leading-relaxed">
+                  Pay once. Unlimited syllabus parsing for your entire degree. Zero subscriptions.
                 </p>
               </div>
 
               {/* Primary Direct Whop Checkout Button */}
-              <a
-                href={WHOP_ANNUAL_CHECKOUT_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => {
-                  e.preventDefault();
-                  openCheckout(WHOP_ANNUAL_CHECKOUT_URL);
-                }}
+              <button
+                type="button"
+                onClick={openCheckout}
                 className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-serif font-semibold bg-stone-900 hover:bg-stone-800 text-white rounded-xl shadow-xs transition-all active:scale-[0.98] cursor-pointer min-h-[46px]"
               >
-                <span>Get Annual Pass ($24/yr)</span>
+                <Lock className="w-4 h-4 text-amber-300" />
+                <span>Unlock Lifetime Importer — $15 (One-Time)</span>
                 <ExternalLink className="w-4 h-4 ml-0.5 opacity-80" />
-              </a>
-            </div>
+              </button>
 
-            {/* 2. Monthly Plan (Secondary Option) */}
-            <div className="text-center pt-0.5">
-              <a
-                href={WHOP_MONTHLY_CHECKOUT_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => {
-                  e.preventDefault();
-                  openCheckout(WHOP_MONTHLY_CHECKOUT_URL);
-                }}
-                className="inline-flex items-center gap-1.5 text-xs font-serif text-stone-600 hover:text-stone-950 underline decoration-stone-300 hover:decoration-stone-900 transition-colors cursor-pointer py-1"
-              >
-                <span>or choose Monthly ($4 / month)</span>
-                <ExternalLink className="w-3 h-3 text-stone-400 inline" />
-              </a>
+              {/* Subtle sub-caption below button */}
+              <p className="text-center text-[11px] font-serif text-stone-500 italic">
+                Pay once. Unlimited syllabus parsing for your entire degree. Zero subscriptions.
+              </p>
             </div>
           </div>
         )}

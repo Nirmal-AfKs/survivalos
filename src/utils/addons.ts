@@ -14,30 +14,35 @@ export const STORAGE_KEYS = {
   IMPORTER: 'cadence_addon_importer',
 };
 
-export const PRO_CHECKOUT_URL = 'https://whop.com/softmarket-2/cadence-pro-course-importer';
-export const WHOP_ANNUAL_CHECKOUT_URL = 'https://whop.com/checkout/plan_1Hv3fzf6nWAxP';
+export const WHOP_LIFETIME_CHECKOUT_URL = 'https://whop.com/checkout/plan_1Hv3fzf6nWAxP';
+export const PRO_CHECKOUT_URL = WHOP_LIFETIME_CHECKOUT_URL;
+
+// Aliases for backwards compatibility with any legacy imports
+export const WHOP_ANNUAL_CHECKOUT_URL = WHOP_LIFETIME_CHECKOUT_URL;
 export const WHOP_MONTHLY_CHECKOUT_URL = 'https://whop.com/checkout/plan_r9yJOZILo1wsG';
 
 export const PRO_ADDON = {
   name: 'Cadence Pro: 1-Click Course & Outline Importer',
-  monthlyPrice: 4,
-  yearlyPrice: 24,
-  yearlySavings: 'Save 50% — 6 Months Free',
+  price: 15,
+  pricingLabel: '$15 (One-Time)',
+  subcaption: 'Pay once. Unlimited syllabus parsing for your entire degree. Zero subscriptions.',
   description: 'Instantly transform course notes, syllabi, and raw bullet points into interleaved 30-minute daylight focus chunks with 1 tap.',
-  checkoutUrl: PRO_CHECKOUT_URL,
-  annualCheckoutUrl: WHOP_ANNUAL_CHECKOUT_URL,
-  monthlyCheckoutUrl: WHOP_MONTHLY_CHECKOUT_URL,
+  checkoutUrl: WHOP_LIFETIME_CHECKOUT_URL,
+  lifetimeCheckoutUrl: WHOP_LIFETIME_CHECKOUT_URL,
+  // Backward compatibility fields
+  monthlyPrice: 4,
+  yearlyPrice: 15,
 };
 
 // Backward-compatibility pricing object
 export const ADDON_PRICING = {
   importer: {
     name: 'Cadence Pro: 1-Click Course & Outline Importer',
-    monthly: 4,
-    yearly: 24,
-    savings: 'Save 50% — 6 Months Free',
+    price: 15,
+    pricingLabel: '$15 (One-Time)',
+    subcaption: 'Pay once. Unlimited syllabus parsing for your entire degree. Zero subscriptions.',
     description: PRO_ADDON.description,
-    checkoutUrl: PRO_CHECKOUT_URL,
+    checkoutUrl: WHOP_LIFETIME_CHECKOUT_URL,
   },
 };
 
@@ -99,7 +104,7 @@ export function resetAddonsToFree(): AddonStatus {
 }
 
 /**
- * Developer Bypass & Promo Code Handler:
+ * Developer Bypass & Promo Code Handler (silent/programmatic only):
  * - 'test-importer' -> unlocks Cadence Pro (Course Importer)
  * - 'test-all' -> unlocks Cadence Pro
  */
@@ -166,4 +171,3 @@ if (typeof window !== 'undefined') {
     return '↺ Cadence Pro reset to Free via console.';
   };
 }
-
