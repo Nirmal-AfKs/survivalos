@@ -69,6 +69,8 @@ import {
   ADDON_PRICING,
   PRO_ADDON,
   PRO_CHECKOUT_URL,
+  WHOP_ANNUAL_CHECKOUT_URL,
+  WHOP_MONTHLY_CHECKOUT_URL,
   checkAndApplyPostPurchaseUnlock
 } from '../src/utils/addons';
 
@@ -1268,7 +1270,11 @@ it('resets Cadence Pro back to free tier', () => {
 
 it('contains correct Whop live checkout link and pricing structure', () => {
   assert.strictEqual(PRO_CHECKOUT_URL, 'https://whop.com/softmarket-2/cadence-pro-course-importer');
+  assert.strictEqual(WHOP_ANNUAL_CHECKOUT_URL, 'https://whop.com/checkout/plan_1Hv3fzf6nWAxP');
+  assert.strictEqual(WHOP_MONTHLY_CHECKOUT_URL, 'https://whop.com/checkout/plan_r9yJOZILo1wsG');
   assert.strictEqual(PRO_ADDON.checkoutUrl, 'https://whop.com/softmarket-2/cadence-pro-course-importer');
+  assert.strictEqual(PRO_ADDON.annualCheckoutUrl, 'https://whop.com/checkout/plan_1Hv3fzf6nWAxP');
+  assert.strictEqual(PRO_ADDON.monthlyCheckoutUrl, 'https://whop.com/checkout/plan_r9yJOZILo1wsG');
   assert.strictEqual(PRO_ADDON.monthlyPrice, 4);
   assert.strictEqual(PRO_ADDON.yearlyPrice, 24);
 });

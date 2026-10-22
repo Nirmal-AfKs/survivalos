@@ -15,6 +15,8 @@ export const STORAGE_KEYS = {
 };
 
 export const PRO_CHECKOUT_URL = 'https://whop.com/softmarket-2/cadence-pro-course-importer';
+export const WHOP_ANNUAL_CHECKOUT_URL = 'https://whop.com/checkout/plan_1Hv3fzf6nWAxP';
+export const WHOP_MONTHLY_CHECKOUT_URL = 'https://whop.com/checkout/plan_r9yJOZILo1wsG';
 
 export const PRO_ADDON = {
   name: 'Cadence Pro: 1-Click Course & Outline Importer',
@@ -23,6 +25,8 @@ export const PRO_ADDON = {
   yearlySavings: 'Save 50% — 6 Months Free',
   description: 'Instantly transform course notes, syllabi, and raw bullet points into interleaved 30-minute daylight focus chunks with 1 tap.',
   checkoutUrl: PRO_CHECKOUT_URL,
+  annualCheckoutUrl: WHOP_ANNUAL_CHECKOUT_URL,
+  monthlyCheckoutUrl: WHOP_MONTHLY_CHECKOUT_URL,
 };
 
 // Backward-compatibility pricing object

@@ -4,23 +4,23 @@ import {
   Sparkles, 
   Check, 
   FileText, 
-  Zap, 
-  Shield, 
   KeyRound, 
   RotateCcw, 
   ExternalLink,
-  Layers,
   Clock,
-  Heart
+  Heart,
+  Smartphone,
+  ShieldCheck,
+  ArrowRight
 } from 'lucide-react';
 import { 
   getAddonStatus, 
-  setAddonUnlocked, 
   resetAddonsToFree, 
   applyBypassCode, 
   AddonStatus, 
   PRO_ADDON,
-  PRO_CHECKOUT_URL 
+  WHOP_ANNUAL_CHECKOUT_URL,
+  WHOP_MONTHLY_CHECKOUT_URL 
 } from '../utils/addons';
 
 interface AddOnsModalProps {
@@ -35,7 +35,6 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
   onStatusChange,
 }) => {
   const [status, setStatus] = useState<AddonStatus>(() => getAddonStatus());
-  const [billingCycle, setBillingCycle] = useState<'yearly' | 'monthly'>('yearly');
   const [bypassCode, setBypassCode] = useState('');
   const [feedback, setFeedback] = useState<{ message: string; isError?: boolean } | null>(null);
 
@@ -49,11 +48,12 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleApplyCode = (e?: React.FormEvent) => {
+  const handleApplyCode = (e?: React.FormEvent, codeToApply?: string) => {
     if (e) e.preventDefault();
-    if (!bypassCode.trim()) return;
+    const code = (codeToApply !== undefined ? codeToApply : bypassCode).trim();
+    if (!code) return;
 
-    const result = applyBypassCode(bypassCode);
+    const result = applyBypassCode(code);
     setStatus(result.unlocked);
     setFeedback({
       message: result.message,
@@ -61,14 +61,6 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
     });
     if (result.success) {
       onStatusChange?.(result.unlocked);
-    }
-  };
-
-  const handleOpenCheckout = () => {
-    try {
-      window.open(PRO_CHECKOUT_URL, '_blank', 'noopener,noreferrer');
-    } catch {
-      window.location.href = PRO_CHECKOUT_URL;
     }
   };
 
@@ -82,6 +74,14 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
   };
 
   const isUnlocked = status.importer;
+
+  const openCheckout = (url: string) => {
+    try {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch {
+      window.location.href = url;
+    }
+  };
 
   return (
     <div 
@@ -97,10 +97,10 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-xs font-serif text-stone-500">
               <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-              <span>Sanctuary Add-On</span>
+              <span>Cadence Sanctuary Pro</span>
             </div>
             <h2 className="text-xl sm:text-2xl font-serif font-normal tracking-tight text-stone-900">
-              {PRO_ADDON.name}
+              Unlock Cadence Pro
             </h2>
           </div>
           <button
@@ -114,7 +114,7 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
 
         {/* Feedback Alert */}
         {feedback && (
-          <div className={`p-3 rounded-2xl text-xs font-serif flex items-center justify-between gap-2 ${
+          <div className={`p-3 rounded-2xl text-xs font-serif flex items-center justify-between gap-2 animate-in fade-in duration-150 ${
             feedback.isError 
               ? 'bg-rose-50 text-rose-900 border border-rose-200' 
               : 'bg-emerald-50 text-emerald-900 border border-emerald-200'
@@ -122,115 +122,125 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
             <span>{feedback.message}</span>
             <button 
               onClick={() => setFeedback(null)}
-              className="text-stone-400 hover:text-stone-700 p-0.5"
+              className="text-stone-400 hover:text-stone-700 p-0.5 cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
 
-        {/* Pro Status Banner if Unlocked */}
+        {/* Pro Status Banner if Already Unlocked */}
         {isUnlocked ? (
-          <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200/90 space-y-1.5 text-emerald-950">
+          <div className="p-5 rounded-2xl bg-emerald-50/90 border border-emerald-200 space-y-2 text-emerald-950">
             <div className="flex items-center justify-between">
-              <span className="font-serif font-semibold text-sm flex items-center gap-1.5 text-emerald-900">
-                <Check className="w-4 h-4 text-emerald-600" />
+              <span className="font-serif font-semibold text-base flex items-center gap-2 text-emerald-900">
+                <Check className="w-5 h-5 text-emerald-600 stroke-[2.5]" />
                 <span>Cadence Pro is Active</span>
               </span>
-              <span className="text-[10px] font-sans font-bold uppercase tracking-wider bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full">
+              <span className="text-[10px] font-sans font-bold uppercase tracking-wider bg-emerald-200 text-emerald-900 px-2.5 py-0.5 rounded-full border border-emerald-300">
                 Unlocked
               </span>
             </div>
             <p className="text-xs font-serif text-emerald-800 leading-relaxed">
-              1-Click Task & Course Outline Importer is permanently enabled. Slicing notes into 30-minute interleaved focus chunks is ready to use anytime.
+              1-Click Task & Course Outline Importer, multi-day intelligent scheduling distribution, and 1-scan mobile device pairing are permanently unlocked on your device.
             </p>
           </div>
         ) : (
-          /* Billing Toggle & Plan Selection */
+          /* Checkout Tier Options */
           <div className="space-y-4">
-            {/* Value Proposition Description */}
             <p className="text-xs sm:text-sm font-serif text-stone-600 leading-relaxed">
-              Transform syllabus outlines, raw course notes, and multi-topic reading lists into balanced 30-minute interleaved focus blocks in a single tap.
+              Instantly turn course notes, syllabi, and raw outlines into balanced 30-minute focus chunks distributed across your daylight schedule.
             </p>
 
-            {/* Pricing Cycle Switcher */}
-            <div className="grid grid-cols-2 gap-2.5 p-1 bg-stone-200/60 rounded-2xl">
-              <button
-                type="button"
-                onClick={() => setBillingCycle('yearly')}
-                className={`py-2 px-3 rounded-xl text-xs font-serif transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
-                  billingCycle === 'yearly'
-                    ? 'bg-white text-stone-900 font-semibold shadow-xs'
-                    : 'text-stone-600 hover:text-stone-900'
-                }`}
-              >
-                <div className="flex items-center gap-1">
-                  <span>Annual Billing</span>
-                  <span className="text-[9px] font-sans font-bold bg-amber-200 text-amber-900 px-1.5 py-0.2 rounded-md">
-                    -50%
-                  </span>
-                </div>
-                <span className="font-mono text-xs font-bold text-stone-800">
-                  ${PRO_ADDON.yearlyPrice} / year
-                </span>
-                <span className="text-[10px] text-emerald-700 font-serif">
-                  {PRO_ADDON.yearlySavings}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setBillingCycle('monthly')}
-                className={`py-2 px-3 rounded-xl text-xs font-serif transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
-                  billingCycle === 'monthly'
-                    ? 'bg-white text-stone-900 font-semibold shadow-xs'
-                    : 'text-stone-600 hover:text-stone-900'
-                }`}
-              >
-                <span>Monthly Billing</span>
-                <span className="font-mono text-xs font-bold text-stone-800">
-                  ${PRO_ADDON.monthlyPrice} / month
-                </span>
-                <span className="text-[10px] text-stone-400 font-serif">
-                  Cancel anytime
-                </span>
-              </button>
-            </div>
-
-            {/* Highlights bullet points */}
-            <div className="p-3.5 rounded-2xl bg-white border border-stone-200/90 shadow-2xs space-y-2 text-xs font-serif">
-              <div className="flex items-start gap-2 text-stone-700">
-                <FileText className="w-3.5 h-3.5 text-stone-800 shrink-0 mt-0.5" />
+            {/* Feature Highlights Grid */}
+            <div className="p-3.5 rounded-2xl bg-white border border-stone-200/90 shadow-2xs space-y-2.5 text-xs font-serif text-stone-700">
+              <div className="flex items-start gap-2.5">
+                <FileText className="w-3.5 h-3.5 text-stone-900 shrink-0 mt-0.5" />
                 <span>
-                  <strong>Regex Outline Engine:</strong> Parses lines like <code className="bg-stone-100 px-1 py-0.5 rounded text-stone-900">Calculus Review - 90m</code> or <code className="bg-stone-100 px-1 py-0.5 rounded text-stone-900">Lab 2h</code> automatically.
+                  <strong>Natural Deadline Regex Importer:</strong> Parses lines like <code className="bg-stone-100 px-1 py-0.5 rounded text-stone-900 font-mono text-[11px]">Calculus - 90m @ tomorrow</code> or <code className="bg-stone-100 px-1 py-0.5 rounded text-stone-900 font-mono text-[11px]">Lab 2h @ Friday</code>.
                 </span>
               </div>
-              <div className="flex items-start gap-2 text-stone-700">
-                <Clock className="w-3.5 h-3.5 text-stone-800 shrink-0 mt-0.5" />
+              <div className="flex items-start gap-2.5">
+                <Clock className="w-3.5 h-3.5 text-stone-900 shrink-0 mt-0.5" />
                 <span>
-                  <strong>30-Minute Cognitive Slicing:</strong> Slices multi-hour workloads into humane parts to preserve focus stamina.
+                  <strong>Multi-Day Interleaved Pacing:</strong> Automatically distributes focus blocks across the week leading to each deadline with zero cramming.
                 </span>
               </div>
-              <div className="flex items-start gap-2 text-stone-700">
+              <div className="flex items-start gap-2.5">
+                <Smartphone className="w-3.5 h-3.5 text-stone-900 shrink-0 mt-0.5" />
+                <span>
+                  <strong>1-Camera-Scan Mobile Pairing:</strong> Point your phone camera to transfer your schedule and install Cadence PWA to your mobile home screen.
+                </span>
+              </div>
+              <div className="flex items-start gap-2.5">
                 <Heart className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
                 <span>
-                  <strong>Nature Audio Remains Free:</strong> Ocean Waves, Rainfall, and Brook Water soundscapes remain 100% free for everyone.
+                  <strong>Nature Soundscapes Always Free:</strong> Ocean Waves, Rainfall, and Brook soundscapes remain 100% free for all users.
                 </span>
               </div>
             </div>
 
-            {/* Checkout Action Button */}
-            <button
-              type="button"
-              onClick={handleOpenCheckout}
-              className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-serif font-semibold bg-stone-900 hover:bg-stone-800 text-white rounded-2xl shadow-sm transition-all active:scale-[0.98] cursor-pointer min-h-[46px]"
-            >
-              <span>Unlock Cadence Pro</span>
-              <span className="font-mono text-xs text-stone-300">
-                ({billingCycle === 'yearly' ? `$${PRO_ADDON.yearlyPrice}/yr` : `$${PRO_ADDON.monthlyPrice}/mo`})
-              </span>
-              <ExternalLink className="w-3.5 h-3.5 ml-1 opacity-80" />
-            </button>
+            {/* 1. Annual Plan (Primary Highlighted Card) */}
+            <div className="relative p-5 rounded-2xl bg-white border-2 border-stone-900 shadow-md space-y-3.5 text-stone-900">
+              {/* Highlight Badge */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-amber-500 fill-amber-500" />
+                  <h3 className="text-base font-serif font-bold text-stone-900">
+                    Annual Pass (Best Value)
+                  </h3>
+                </div>
+                <span className="text-[10px] font-sans font-bold uppercase tracking-wider bg-amber-200 text-amber-950 px-2 py-0.5 rounded-full border border-amber-300 shadow-2xs">
+                  Save 50%
+                </span>
+              </div>
+
+              {/* Price Line */}
+              <div className="space-y-0.5">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-serif font-bold text-stone-900">$24</span>
+                  <span className="text-xs font-serif text-stone-500">/ year</span>
+                  <span className="text-xs font-serif text-emerald-800 font-medium ml-1">
+                    (Just $2/month — Save 50% / 6 Months Free)
+                  </span>
+                </div>
+                <p className="text-[11px] font-serif text-stone-500">
+                  Full 1-year access to all Cadence Pro features and mobile sync.
+                </p>
+              </div>
+
+              {/* Primary Direct Whop Checkout Button */}
+              <a
+                href={WHOP_ANNUAL_CHECKOUT_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  openCheckout(WHOP_ANNUAL_CHECKOUT_URL);
+                }}
+                className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-serif font-semibold bg-stone-900 hover:bg-stone-800 text-white rounded-xl shadow-xs transition-all active:scale-[0.98] cursor-pointer min-h-[46px]"
+              >
+                <span>Get Annual Pass ($24/yr)</span>
+                <ExternalLink className="w-4 h-4 ml-0.5 opacity-80" />
+              </a>
+            </div>
+
+            {/* 2. Monthly Plan (Secondary Option) */}
+            <div className="text-center pt-0.5">
+              <a
+                href={WHOP_MONTHLY_CHECKOUT_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  openCheckout(WHOP_MONTHLY_CHECKOUT_URL);
+                }}
+                className="inline-flex items-center gap-1.5 text-xs font-serif text-stone-600 hover:text-stone-950 underline decoration-stone-300 hover:decoration-stone-900 transition-colors cursor-pointer py-1"
+              >
+                <span>or choose Monthly ($4 / month)</span>
+                <ExternalLink className="w-3 h-3 text-stone-400 inline" />
+              </a>
+            </div>
           </div>
         )}
 
@@ -246,7 +256,7 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
             </span>
           </div>
 
-          <form onSubmit={handleApplyCode} className="flex items-center gap-2">
+          <form onSubmit={(e) => handleApplyCode(e)} className="flex items-center gap-2">
             <input
               type="text"
               placeholder="e.g. test-importer"
@@ -261,6 +271,18 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
               Apply
             </button>
           </form>
+
+          {/* Quick 1-click test button for reviewers */}
+          <div className="flex items-center justify-between pt-1 text-[11px] font-serif text-stone-500">
+            <span>Quick test:</span>
+            <button
+              type="button"
+              onClick={() => handleApplyCode(undefined, 'test-importer')}
+              className="text-stone-700 hover:text-stone-900 underline font-mono text-[10px] cursor-pointer"
+            >
+              Click to unlock with test-importer
+            </button>
+          </div>
         </div>
 
         {/* Footer Actions */}
