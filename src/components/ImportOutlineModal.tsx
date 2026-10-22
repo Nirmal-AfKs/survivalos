@@ -7,15 +7,13 @@ import {
   Clock, 
   Calendar, 
   ExternalLink,
-  KeyRound,
   Check
 } from 'lucide-react';
 import { parseRawCourseOutline } from '../utils/outlineParser';
 import { WorkTask } from '../types';
 import { 
   WHOP_ANNUAL_CHECKOUT_URL, 
-  WHOP_MONTHLY_CHECKOUT_URL, 
-  applyBypassCode 
+  WHOP_MONTHLY_CHECKOUT_URL 
 } from '../utils/addons';
 
 interface ImportOutlineModalProps {
@@ -37,13 +35,12 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
   isOpen,
   onClose,
   isImporterUnlocked,
-  onOpenAddOns,
+  onOpenAddOns: _onOpenAddOns,
   onImportTasks,
-  todayKey,
+  todayKey: _todayKey,
   focusMinutes = 30,
 }) => {
   const [rawText, setRawText] = useState(SAMPLE_OUTLINE);
-  const [bypassFeedback, setBypassFeedback] = useState<string | null>(null);
 
   const baseDate = useMemo(() => new Date(), []);
   const activeFocusMinutes = Math.max(10, Math.min(180, focusMinutes && focusMinutes > 0 ? focusMinutes : 30));
@@ -98,14 +95,6 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
       window.open(WHOP_MONTHLY_CHECKOUT_URL, '_blank', 'noopener,noreferrer');
     } catch {
       window.location.href = WHOP_MONTHLY_CHECKOUT_URL;
-    }
-  };
-
-  const handleQuickBypass = () => {
-    const res = applyBypassCode('test-importer');
-    if (res.success) {
-      setBypassFeedback('✨ Cadence Pro unlocked!');
-      setTimeout(() => setBypassFeedback(null), 3000);
     }
   };
 
@@ -270,7 +259,7 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
                 </button>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-1 text-xs font-serif">
+              <div className="flex items-center justify-center px-1 text-xs font-serif">
                 <button
                   type="button"
                   onClick={handleOpenMonthlyCheckout}
@@ -278,23 +267,6 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
                 >
                   or choose Monthly ($4 / month)
                 </button>
-
-                <div className="flex items-center gap-1.5 text-[11px] font-mono text-stone-400">
-                  <button
-                    type="button"
-                    onClick={handleQuickBypass}
-                    className="hover:text-stone-700 underline decoration-stone-300 cursor-pointer inline-flex items-center gap-1"
-                    title="Developer testing bypass"
-                  >
-                    <KeyRound className="w-3 h-3 text-stone-400" />
-                    <span>Dev bypass: test-importer</span>
-                  </button>
-                  {bypassFeedback && (
-                    <span className="font-serif font-semibold text-emerald-600 animate-in fade-in">
-                      {bypassFeedback}
-                    </span>
-                  )}
-                </div>
               </div>
             </div>
           )}

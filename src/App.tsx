@@ -39,7 +39,7 @@ import {
   isDefaultItem
 } from './utils/storage';
 import { formatDateKey, recalculateSchedule, addDays } from './utils/scheduler';
-import { parseSquadFromUrl, encodeSquadPayload, parsePairFromUrl } from './utils/squad';
+import { parseSquadFromUrl, encodeSquadPayload } from './utils/squad';
 import { cleanTaskTitle } from './utils/format';
 import { parseTemplateFromUrl, materializeTemplate, CourseTemplatePayload } from './utils/template';
 
@@ -71,17 +71,31 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const todayKey = formatDateKey(new Date());
 
-  // Automatic Post-Purchase Unlock Detection (?unlocked=true)
+  // Automatic Post-Purchase Unlock Detection (?unlocked=true) & Silent Dev Console Helpers
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.location.search && window.location.search.includes('unlocked=true')) {
-      try {
+    if (typeof window !== 'undefined') {
+      // Silent Dev Console Unlocking (no public UI clutter)
+      (window as any).cadenceDevUnlock = () => {
         localStorage.setItem('cadence_addon_importer', 'true');
-        const cleanPath = window.location.pathname || '/';
-        window.history.replaceState({}, '', cleanPath);
-        setAddons({ importer: true });
-        setToastMessage("✨ Cadence Pro Unlocked! 1-Click Task & Course Importer is now active.");
-      } catch (err) {
-        console.error('Failed to process unlock parameter:', err);
+        window.dispatchEvent(new Event('cadence_addons_changed'));
+        console.log('✨ Cadence Pro unlocked via dev console.');
+      };
+      (window as any).cadenceDevReset = () => {
+        localStorage.removeItem('cadence_addon_importer');
+        window.dispatchEvent(new Event('cadence_addons_changed'));
+        console.log('↺ Cadence Pro reset to Free via dev console.');
+      };
+
+      if (window.location.search && window.location.search.includes('unlocked=true')) {
+        try {
+          localStorage.setItem('cadence_addon_importer', 'true');
+          const cleanPath = window.location.pathname || '/';
+          window.history.replaceState({}, '', cleanPath);
+          setAddons({ importer: true });
+          setToastMessage("✨ Cadence Pro Unlocked! 1-Click Task & Course Importer is now active.");
+        } catch (err) {
+          console.error('Failed to process unlock parameter:', err);
+        }
       }
     }
   }, []);
@@ -148,52 +162,8 @@ export default function App() {
   useEffect(() => {
     document.title = 'cadence. — daylight focus & squad rhythm';
 
-    // Check for #template=, #squad=, or #pair= on mount or on hash changes
+    // Check for #template= or #squad= on mount or on hash changes
     const handleCheckHash = () => {
-      // Check for #pair= first (Pro Mobile Pairing & Schedule Sync)
-      const parsedPair = parsePairFromUrl();
-      if (parsedPair) {
-        if (parsedPair.pro) {
-          localStorage.setItem('cadence_addon_importer', 'true');
-          setAddons({ importer: true });
-          window.dispatchEvent(new Event('cadence_addons_changed'));
-        }
-        let updatedTasks = tasks;
-        if (parsedPair.tasks && parsedPair.tasks.length > 0) {
-          updatedTasks = parsedPair.tasks as WorkTask[];
-          setTasks(updatedTasks);
-          saveTasks(updatedTasks);
-        }
-        let updatedEvents = events;
-        if (parsedPair.events && parsedPair.events.length > 0) {
-          updatedEvents = parsedPair.events as LifeEvent[];
-          setEvents(updatedEvents);
-          saveEvents(updatedEvents);
-        }
-        let updatedSettings = settings;
-        if (parsedPair.settings) {
-          updatedSettings = { ...settings, ...parsedPair.settings };
-          setSettings(updatedSettings);
-          saveSettings(updatedSettings);
-        }
-
-        const rebalanced = recalculateSchedule(updatedTasks, updatedEvents, updatedSettings, [], new Date());
-        setSlots(rebalanced);
-        saveSlots(rebalanced);
-        setIsSampleSchedule(false);
-        saveIsSampleSchedule(false);
-        setActiveTab('today');
-
-        setToastMessage("📱 Paired with Desktop! Active cadence synced. Tap Share → 'Add to Home Screen' to install PWA.");
-
-        try {
-          window.history.replaceState(null, '', window.location.pathname);
-        } catch {
-          window.location.hash = '';
-        }
-        return;
-      }
-
       // Check for #template=
       const parsedTemplate = parseTemplateFromUrl();
       if (parsedTemplate) {
@@ -737,7 +707,7 @@ export default function App() {
         />
       )}
 
-      {/* Squad Overlap Radar & Mobile Pair (1-Tap WhatsApp/Telegram/QR Sharing Loop) */}
+      {/* Squad Overlap Radar (1-Tap WhatsApp/Telegram/QR Sharing Loop) */}
       {isSquadRadarOpen && (
         <SquadRadarModal
           isOpen={isSquadRadarOpen}
@@ -746,9 +716,6 @@ export default function App() {
           events={events}
           settings={settings}
           todayKey={todayKey}
-          tasks={tasks}
-          isPro={addons.importer}
-          onOpenAddOns={() => setIsAddOnsOpen(true)}
           onOpenLegal={() => setIsLegalModalOpen(true)}
         />
       )}

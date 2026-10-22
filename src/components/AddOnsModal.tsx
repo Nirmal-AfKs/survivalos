@@ -4,22 +4,14 @@ import {
   Sparkles, 
   Check, 
   FileText, 
-  KeyRound, 
-  RotateCcw, 
   ExternalLink,
   Clock,
-  Heart,
-  Smartphone,
-  ShieldCheck,
-  ArrowRight
+  Heart
 } from 'lucide-react';
 import { 
   getAddonStatus, 
-  resetAddonsToFree, 
-  applyBypassCode, 
   AddonStatus, 
-  PRO_ADDON,
-  WHOP_ANNUAL_CHECKOUT_URL,
+  WHOP_ANNUAL_CHECKOUT_URL, 
   WHOP_MONTHLY_CHECKOUT_URL 
 } from '../utils/addons';
 
@@ -32,46 +24,29 @@ interface AddOnsModalProps {
 export const AddOnsModal: React.FC<AddOnsModalProps> = ({
   isOpen,
   onClose,
-  onStatusChange,
 }) => {
   const [status, setStatus] = useState<AddonStatus>(() => getAddonStatus());
-  const [bypassCode, setBypassCode] = useState('');
-  const [feedback, setFeedback] = useState<{ message: string; isError?: boolean } | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setStatus(getAddonStatus());
-      setFeedback(null);
-      setBypassCode('');
     }
   }, [isOpen]);
 
+  // Keep synced if status changes in background
+  useEffect(() => {
+    const handleStatusUpdate = () => {
+      setStatus(getAddonStatus());
+    };
+    window.addEventListener('cadence_addons_changed', handleStatusUpdate);
+    window.addEventListener('storage', handleStatusUpdate);
+    return () => {
+      window.removeEventListener('cadence_addons_changed', handleStatusUpdate);
+      window.removeEventListener('storage', handleStatusUpdate);
+    };
+  }, []);
+
   if (!isOpen) return null;
-
-  const handleApplyCode = (e?: React.FormEvent, codeToApply?: string) => {
-    if (e) e.preventDefault();
-    const code = (codeToApply !== undefined ? codeToApply : bypassCode).trim();
-    if (!code) return;
-
-    const result = applyBypassCode(code);
-    setStatus(result.unlocked);
-    setFeedback({
-      message: result.message,
-      isError: !result.success,
-    });
-    if (result.success) {
-      onStatusChange?.(result.unlocked);
-    }
-  };
-
-  const handleResetToFree = () => {
-    const updated = resetAddonsToFree();
-    setStatus(updated);
-    setFeedback({
-      message: 'Cadence Pro reset to Free tier.',
-    });
-    onStatusChange?.(updated);
-  };
 
   const isUnlocked = status.importer;
 
@@ -112,23 +87,6 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
           </button>
         </div>
 
-        {/* Feedback Alert */}
-        {feedback && (
-          <div className={`p-3 rounded-2xl text-xs font-serif flex items-center justify-between gap-2 animate-in fade-in duration-150 ${
-            feedback.isError 
-              ? 'bg-rose-50 text-rose-900 border border-rose-200' 
-              : 'bg-emerald-50 text-emerald-900 border border-emerald-200'
-          }`}>
-            <span>{feedback.message}</span>
-            <button 
-              onClick={() => setFeedback(null)}
-              className="text-stone-400 hover:text-stone-700 p-0.5 cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
         {/* Pro Status Banner if Already Unlocked */}
         {isUnlocked ? (
           <div className="p-5 rounded-2xl bg-emerald-50/90 border border-emerald-200 space-y-2 text-emerald-950">
@@ -142,14 +100,14 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
               </span>
             </div>
             <p className="text-xs font-serif text-emerald-800 leading-relaxed">
-              1-Click Task & Course Outline Importer, multi-day intelligent scheduling distribution, and 1-scan mobile device pairing are permanently unlocked on your device.
+              1-Click Task & Course Outline Importer and multi-day intelligent scheduling distribution are permanently unlocked on your device.
             </p>
           </div>
         ) : (
           /* Checkout Tier Options */
           <div className="space-y-4">
             <p className="text-xs sm:text-sm font-serif text-stone-600 leading-relaxed">
-              Instantly turn course notes, syllabi, and raw outlines into balanced 30-minute focus chunks distributed across your daylight schedule.
+              Instantly turn course notes, syllabi, and raw outlines into balanced focus chunks distributed across your daylight schedule.
             </p>
 
             {/* Feature Highlights Grid */}
@@ -164,12 +122,6 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
                 <Clock className="w-3.5 h-3.5 text-stone-900 shrink-0 mt-0.5" />
                 <span>
                   <strong>Multi-Day Interleaved Pacing:</strong> Automatically distributes focus blocks across the week leading to each deadline with zero cramming.
-                </span>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <Smartphone className="w-3.5 h-3.5 text-stone-900 shrink-0 mt-0.5" />
-                <span>
-                  <strong>1-Camera-Scan Mobile Pairing:</strong> Point your phone camera to transfer your schedule and install Cadence PWA to your mobile home screen.
                 </span>
               </div>
               <div className="flex items-start gap-2.5">
@@ -205,7 +157,7 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
                   </span>
                 </div>
                 <p className="text-[11px] font-serif text-stone-500">
-                  Full 1-year access to all Cadence Pro features and mobile sync.
+                  Full 1-year access to the Cadence Pro Course & Outline Importer.
                 </p>
               </div>
 
@@ -244,62 +196,12 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
           </div>
         )}
 
-        {/* Developer Bypass & Promo Code Input */}
-        <div className="p-3.5 bg-white/70 border border-stone-200/80 rounded-2xl space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-serif font-medium text-stone-700 flex items-center gap-1.5">
-              <KeyRound className="w-3.5 h-3.5 text-stone-500" />
-              <span>Developer Bypass & Promo Code</span>
-            </label>
-            <span className="text-[10px] font-mono text-stone-400">
-              test-importer · test-all
-            </span>
-          </div>
-
-          <form onSubmit={(e) => handleApplyCode(e)} className="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="e.g. test-importer"
-              value={bypassCode}
-              onChange={e => setBypassCode(e.target.value)}
-              className="flex-1 px-3 py-1.5 text-xs font-mono bg-white border border-stone-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-stone-900 text-stone-900 placeholder:text-stone-400"
-            />
-            <button
-              type="submit"
-              className="px-3.5 py-1.5 text-xs font-serif bg-stone-900 hover:bg-stone-800 text-white rounded-xl transition-all shadow-xs cursor-pointer min-h-[34px]"
-            >
-              Apply
-            </button>
-          </form>
-
-          {/* Quick 1-click test button for reviewers */}
-          <div className="flex items-center justify-between pt-1 text-[11px] font-serif text-stone-500">
-            <span>Quick test:</span>
-            <button
-              type="button"
-              onClick={() => handleApplyCode(undefined, 'test-importer')}
-              className="text-stone-700 hover:text-stone-900 underline font-mono text-[10px] cursor-pointer"
-            >
-              Click to unlock with test-importer
-            </button>
-          </div>
-        </div>
-
         {/* Footer Actions */}
-        <div className="pt-2 border-t border-stone-200/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={handleResetToFree}
-            className="inline-flex items-center justify-center gap-1.5 text-xs font-serif text-stone-500 hover:text-stone-900 transition-colors cursor-pointer py-1"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset to Free Tier</span>
-          </button>
-
+        <div className="pt-3 border-t border-stone-200/80 flex items-center justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 text-xs font-serif bg-stone-200/70 hover:bg-stone-300/70 text-stone-800 rounded-xl transition-colors cursor-pointer min-h-[38px]"
+            className="w-full sm:w-auto px-6 py-2.5 text-xs font-serif bg-stone-200/70 hover:bg-stone-300/70 text-stone-800 rounded-xl transition-colors cursor-pointer min-h-[38px] font-medium"
           >
             Close
           </button>

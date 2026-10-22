@@ -152,3 +152,18 @@ export function checkAndApplyPostPurchaseUnlock(): boolean {
   }
   return false;
 }
+
+// Silent browser console helpers for developers (zero public UI clutter)
+if (typeof window !== 'undefined') {
+  (window as any).cadenceDevUnlock = () => {
+    localStorage.setItem(STORAGE_KEYS.IMPORTER, 'true');
+    window.dispatchEvent(new Event('cadence_addons_changed'));
+    return '✨ Cadence Pro unlocked via console.';
+  };
+  (window as any).cadenceDevReset = () => {
+    localStorage.removeItem(STORAGE_KEYS.IMPORTER);
+    window.dispatchEvent(new Event('cadence_addons_changed'));
+    return '↺ Cadence Pro reset to Free via console.';
+  };
+}
+
