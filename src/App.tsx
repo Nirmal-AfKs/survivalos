@@ -703,7 +703,7 @@ export default function App() {
           onClick={() => setIsLegalModalOpen(true)}
           className="inline-flex items-center gap-1 text-stone-500 hover:text-stone-800 underline decoration-stone-300 underline-offset-2 transition-colors cursor-pointer not-italic font-sans"
         >
-          ⚖️ Legal & MIT License
+          ⚖️ Legal & Proprietary License
         </button>
       </footer>
 
