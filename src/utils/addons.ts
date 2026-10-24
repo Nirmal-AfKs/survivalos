@@ -47,25 +47,19 @@ export const ADDON_PRICING = {
 };
 
 /**
- * Reads current unlock status from localStorage
+ * Reads current unlock status from localStorage.
+ * 1-Click Course & Outline Importer is 100% FREE for all users.
  */
 export function getAddonStatus(): AddonStatus {
-  if (typeof window === 'undefined' && typeof localStorage === 'undefined') {
-    return { importer: false };
-  }
-  try {
-    const importer = localStorage.getItem(STORAGE_KEYS.IMPORTER) === 'true';
-    return { importer };
-  } catch {
-    return { importer: false };
-  }
+  return { importer: true };
 }
 
 /**
- * Checks if Cadence Pro (Course Importer) is unlocked
+ * Checks if Cadence (Course Importer) is unlocked.
+ * Always returns true — 100% free for all users.
  */
 export function isImporterUnlocked(): boolean {
-  return getAddonStatus().importer;
+  return true;
 }
 
 /**

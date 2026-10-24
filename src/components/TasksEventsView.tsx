@@ -14,7 +14,8 @@ import {
   Sparkles,
   Repeat,
   BookOpen,
-  Shield
+  Shield,
+  FileText
 } from 'lucide-react';
 import { WorkTask, LifeEvent, ScheduledSlot, WhatToBringItem } from '../types';
 import { formatRecurringDaysShort } from '../utils/scheduler';
@@ -29,6 +30,7 @@ interface TasksEventsViewProps {
   onOpenAddWork: () => void;
   onOpenAddEvent: () => void;
   onOpenCourseTemplate?: () => void;
+  onOpenImportOutline?: () => void;
   onDeleteTask: (taskId: string) => void;
   onDeleteEvent: (eventId: string) => void;
   onToggleWhatToBring: (eventId: string, itemId: string) => void;
@@ -45,6 +47,7 @@ export const TasksEventsView: React.FC<TasksEventsViewProps> = ({
   onOpenAddWork,
   onOpenAddEvent,
   onOpenCourseTemplate,
+  onOpenImportOutline,
   onDeleteTask,
   onDeleteEvent,
   onToggleWhatToBring,
@@ -131,11 +134,24 @@ export const TasksEventsView: React.FC<TasksEventsViewProps> = ({
                   type="button"
                   onClick={onOpenCourseTemplate}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-serif text-stone-800 bg-white hover:bg-stone-50 border border-stone-200/90 rounded-xl transition-all shadow-2xs hover:shadow-xs cursor-pointer min-h-[38px]"
-                  title="Export current tasks and deadlines as a 1-tap course syllabus link"
+                  title="Share batch workplan with your entire cohort or badge"
                 >
                   <BookOpen className="w-3.5 h-3.5 text-stone-600" />
-                  <span className="hidden sm:inline">Share as Course / Syllabus Template</span>
-                  <span className="sm:hidden">Share Template</span>
+                  <span className="hidden sm:inline">Share Batch Workplan</span>
+                  <span className="sm:hidden">Share Workplan</span>
+                </button>
+              )}
+
+              {onOpenImportOutline && (
+                <button
+                  type="button"
+                  onClick={onOpenImportOutline}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-serif text-indigo-900 bg-indigo-50/90 hover:bg-indigo-100/90 border border-indigo-200/90 rounded-xl transition-all shadow-2xs hover:shadow-xs cursor-pointer min-h-[38px]"
+                  title="Paste raw syllabus outline or task notes — 100% Free"
+                >
+                  <FileText className="w-3.5 h-3.5 text-indigo-700" />
+                  <span className="hidden sm:inline">Import All Work (Free)</span>
+                  <span className="sm:hidden">Import All</span>
                 </button>
               )}
 

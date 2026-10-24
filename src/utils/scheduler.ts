@@ -135,6 +135,140 @@ export function getDailySlotTemplates(date: Date, settings: ScheduleSettings, ev
   return slots;
 }
 
+export interface DayCapacityInfo {
+  date: Date;
+  dateKey: string;
+  totalSlots: number;
+  usedSlots: number;
+  availableSlots: number;
+  isFull: boolean;
+  isPast: boolean;
+  isRestDay: boolean;
+}
+
+/**
+ * Returns accurate capacity information for a specific day
+ */
+export function getDayCapacityInfo(
+  date: Date,
+  tasks: WorkTask[],
+  events: LifeEvent[],
+  settings: ScheduleSettings,
+  slots: ScheduledSlot[],
+  referenceTime: Date = new Date()
+): DayCapacityInfo {
+  const dateKey = formatDateKey(date);
+  const refKey = formatDateKey(referenceTime);
+  const isToday = dateKey === refKey;
+  const isPast = dateKey < refKey;
+
+  // 1. Day mode determination
+  const dayOfWeek = date.getDay();
+  let mode: 'routine_work' | 'fully_home' | 'free_rest' = 'routine_work';
+  if (settings.dateSpecificModes && settings.dateSpecificModes[dateKey]) {
+    mode = settings.dateSpecificModes[dateKey];
+  } else if (settings.dayModes && settings.dayModes[dayOfWeek]) {
+    mode = settings.dayModes[dayOfWeek];
+  } else if (settings.fullyHomeDay.applicableDays.includes(dayOfWeek)) {
+    mode = 'fully_home';
+  }
+
+  if (mode === 'free_rest') {
+    return {
+      date,
+      dateKey,
+      totalSlots: 0,
+      usedSlots: 0,
+      availableSlots: 0,
+      isFull: true,
+      isPast,
+      isRestDay: true,
+    };
+  }
+
+  const dayEvents = events.filter(e => isEventOnDate(e, date));
+  const templates = getDailySlotTemplates(date, settings, dayEvents);
+  const totalSlots = templates.length;
+
+  if (totalSlots === 0) {
+    return {
+      date,
+      dateKey,
+      totalSlots: 0,
+      usedSlots: 0,
+      availableSlots: 0,
+      isFull: true,
+      isPast,
+      isRestDay: false,
+    };
+  }
+
+  if (isPast) {
+    return {
+      date,
+      dateKey,
+      totalSlots,
+      usedSlots: totalSlots,
+      availableSlots: 0,
+      isFull: true,
+      isPast: true,
+      isRestDay: false,
+    };
+  }
+
+  // Count existing scheduled chunks on this date
+  const dayScheduledSlots = slots.filter(s => s.date === dateKey && !s.isUnscheduled);
+  const completedSlots = dayScheduledSlots.filter(s => s.isCompleted);
+  const activeSlots = dayScheduledSlots.filter(s => !s.isCompleted);
+
+  if (isToday) {
+    const currentClockMinutes = referenceTime.getHours() * 60 + referenceTime.getMinutes();
+    const completedTimes = new Set(completedSlots.map(s => s.startTime));
+
+    // Future templates for today that haven't passed and haven't been completed
+    const futureTemplates = templates.filter(t => {
+      if (completedTimes.has(t.startTime)) return false;
+      const startMin = timeToMinutes(t.startTime);
+      return startMin >= currentClockMinutes;
+    });
+
+    // Active uncompleted slots scheduled for today in future
+    const activeFutureSlotsCount = activeSlots.filter(s => {
+      const startMin = timeToMinutes(s.startTime);
+      return startMin >= currentClockMinutes;
+    }).length;
+
+    const availableSlots = Math.max(0, futureTemplates.length - activeFutureSlotsCount);
+    const usedSlots = totalSlots - availableSlots;
+
+    return {
+      date,
+      dateKey,
+      totalSlots,
+      usedSlots,
+      availableSlots,
+      isFull: availableSlots === 0,
+      isPast: false,
+      isRestDay: false,
+    };
+  }
+
+  // Future day
+  const usedSlots = Math.min(totalSlots, completedSlots.length + activeSlots.length);
+  const availableSlots = Math.max(0, totalSlots - usedSlots);
+
+  return {
+    date,
+    dateKey,
+    totalSlots,
+    usedSlots,
+    availableSlots,
+    isFull: availableSlots === 0,
+    isPast: false,
+    isRestDay: false,
+  };
+}
+
 export interface TodayCapacityMetrics {
   currentClockMinutes: number;
   currentClockTimeStr: string;
@@ -190,6 +324,134 @@ export function calculateTodayCapacity(
     remainingMinutesAvailable,
     totalPendingChunksToday: pendingTodaySlots.length,
     openSlotTemplates: openTemplates,
+  };
+}
+
+export interface TaskCapacityCheckResult {
+  neededChunks: number;
+  totalAvailableSlotsBeforeDeadline: number;
+  isOverCapacity: boolean;
+  daysBreakdown: DayCapacityInfo[];
+  firstDateWithCapacity: string | null;
+  daysUntilDeadline: number;
+  effectiveDeadlineDateKey: string;
+  suggestedDeadlineDate: string;
+}
+
+/**
+ * Checks if new work fits within available slots before the deadline.
+ * Enforces a strict hard ceiling to prevent overplanning.
+ */
+export function checkTaskCapacityCeiling(
+  estimatedMinutes: number,
+  deadlineDateStr: string,
+  tasks: WorkTask[],
+  events: LifeEvent[],
+  settings: ScheduleSettings,
+  slots: ScheduledSlot[],
+  referenceTime: Date = new Date()
+): TaskCapacityCheckResult {
+  const chunkSize = Math.max(15, settings.focusBlockMinutes || 45);
+  const neededChunks = Math.max(1, Math.ceil(estimatedMinutes / chunkSize));
+  const todayKey = formatDateKey(referenceTime);
+  const rawDeadlineDate = parseDateKey(deadlineDateStr);
+
+  // Calculate effective last day (respecting finishDayBeforeDeadline)
+  let effectiveLastDay = rawDeadlineDate;
+  if (settings.finishDayBeforeDeadline) {
+    const dayBefore = addDays(rawDeadlineDate, -1);
+    if (formatDateKey(dayBefore) < todayKey && formatDateKey(rawDeadlineDate) >= todayKey) {
+      effectiveLastDay = new Date(referenceTime);
+    } else {
+      effectiveLastDay = dayBefore;
+    }
+  }
+
+  const effectiveDeadlineKey = formatDateKey(effectiveLastDay);
+
+  // If deadline is already in the past
+  if (effectiveDeadlineKey < todayKey) {
+    let accumulated = 0;
+    let foundDate: Date | null = null;
+    for (let i = 0; i < 60; i++) {
+      const d = addDays(referenceTime, i);
+      const cap = getDayCapacityInfo(d, tasks, events, settings, slots, referenceTime);
+      accumulated += cap.availableSlots;
+      if (accumulated >= neededChunks) {
+        foundDate = d;
+        break;
+      }
+    }
+    const suggestedDate = foundDate 
+      ? (settings.finishDayBeforeDeadline ? addDays(foundDate, 1) : foundDate)
+      : addDays(referenceTime, 4);
+    const suggestedDeadlineDate = formatDateKey(suggestedDate);
+
+    return {
+      neededChunks,
+      totalAvailableSlotsBeforeDeadline: 0,
+      isOverCapacity: true,
+      daysBreakdown: [],
+      firstDateWithCapacity: suggestedDeadlineDate,
+      daysUntilDeadline: 0,
+      effectiveDeadlineDateKey: effectiveDeadlineKey,
+      suggestedDeadlineDate,
+    };
+  }
+
+  // Iterate day-by-day from today up to effectiveLastDay
+  const daysBreakdown: DayCapacityInfo[] = [];
+  let totalAvailableSlots = 0;
+  let curr = new Date(referenceTime);
+  let daysCount = 0;
+
+  while (formatDateKey(curr) <= effectiveDeadlineKey && daysCount < 60) {
+    const cap = getDayCapacityInfo(curr, tasks, events, settings, slots, referenceTime);
+    daysBreakdown.push(cap);
+    totalAvailableSlots += cap.availableSlots;
+    curr = addDays(curr, 1);
+    daysCount++;
+  }
+
+  const isOverCapacity = totalAvailableSlots < neededChunks;
+  let firstDateWithCapacity: string | null = null;
+  let suggestedDeadlineDate = deadlineDateStr;
+
+  if (isOverCapacity) {
+    let accumulated = totalAvailableSlots;
+    let searchDate = curr; // begins on day after effectiveLastDay
+    let foundDate: Date | null = null;
+
+    for (let i = 0; i < 60; i++) {
+      const cap = getDayCapacityInfo(searchDate, tasks, events, settings, slots, referenceTime);
+      accumulated += cap.availableSlots;
+      if (accumulated >= neededChunks) {
+        foundDate = searchDate;
+        break;
+      }
+      searchDate = addDays(searchDate, 1);
+    }
+
+    if (foundDate) {
+      const targetDeadlineDate = settings.finishDayBeforeDeadline ? addDays(foundDate, 1) : foundDate;
+      firstDateWithCapacity = formatDateKey(targetDeadlineDate);
+      suggestedDeadlineDate = firstDateWithCapacity;
+    } else {
+      const fallback = addDays(rawDeadlineDate, 3);
+      firstDateWithCapacity = formatDateKey(fallback);
+      suggestedDeadlineDate = firstDateWithCapacity;
+    }
+  }
+
+  return {
+    neededChunks,
+    totalAvailableSlotsBeforeDeadline: totalAvailableSlots,
+    isOverCapacity,
+    daysBreakdown,
+    firstDateWithCapacity,
+    daysUntilDeadline: daysCount,
+    effectiveDeadlineDateKey: effectiveDeadlineKey,
+    suggestedDeadlineDate,
   };
 }
 

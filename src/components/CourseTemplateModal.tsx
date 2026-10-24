@@ -1,5 +1,18 @@
-import React, { useState, useMemo } from 'react';
-import { X, Copy, Check, Share2, BookOpen, Clock, Calendar, Sparkles } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { 
+  X, 
+  Copy, 
+  Check, 
+  Share2, 
+  BookOpen, 
+  Clock, 
+  Calendar, 
+  Sparkles,
+  QrCode,
+  ShieldCheck,
+  Send,
+  MessageSquare
+} from 'lucide-react';
 import { WorkTask, LifeEvent } from '../types';
 import { 
   createTemplateFromCurrentSchedule, 
@@ -24,6 +37,9 @@ export const CourseTemplateModal: React.FC<CourseTemplateModalProps> = ({
 }) => {
   const [templateName, setTemplateName] = useState('Course Syllabus & Workload Plan');
   const [copied, setCopied] = useState(false);
+  const [showQr, setShowQr] = useState(false);
+  const [qrSvg, setQrSvg] = useState<string>('');
+  const [qrLoading, setQrLoading] = useState(false);
 
   // Generate template payload
   const templatePayload: CourseTemplatePayload = useMemo(() => {
@@ -34,6 +50,44 @@ export const CourseTemplateModal: React.FC<CourseTemplateModalProps> = ({
   const shareUrl = useMemo(() => {
     return buildTemplateShareUrl(templatePayload);
   }, [templatePayload]);
+
+  const liveHost = typeof window !== 'undefined' ? (window.location.host || window.location.hostname) : 'live site';
+
+  // Reactive QR code generator for classroom/desk camera scan
+  useEffect(() => {
+    let isCancelled = false;
+    const generateQr = async () => {
+      if (!showQr) return;
+
+      setQrLoading(true);
+      try {
+        const QRCode = (await import('qrcode')).default;
+        const svg = await QRCode.toString(shareUrl, {
+          type: 'svg',
+          margin: 1,
+          errorCorrectionLevel: 'M',
+          color: {
+            dark: '#1F1E1D',
+            light: '#FAF8F5',
+          },
+        });
+        if (!isCancelled) {
+          setQrSvg(svg);
+        }
+      } catch (err) {
+        console.error('Failed to generate template QR code', err);
+      } finally {
+        if (!isCancelled) {
+          setQrLoading(false);
+        }
+      }
+    };
+
+    generateQr();
+    return () => {
+      isCancelled = true;
+    };
+  }, [showQr, shareUrl]);
 
   if (!isOpen) return null;
 
@@ -63,7 +117,7 @@ export const CourseTemplateModal: React.FC<CourseTemplateModalProps> = ({
       try {
         await (navigator as any).share({
           title: templatePayload.name,
-          text: `Here is the syllabus and study schedule for ${templatePayload.name} on Cadence. Tap to load it into your daily focus rhythm in 1 click:`,
+          text: `📚 Course Workplan for ${templatePayload.name} on Cadence. Tap to test and explore the schedule on your own device:`,
           url: shareUrl,
         });
       } catch (err) {
@@ -75,7 +129,7 @@ export const CourseTemplateModal: React.FC<CourseTemplateModalProps> = ({
   };
 
   const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(
-    `📚 *${templatePayload.name}* Syllabus & Study Plan:\nTap to load the schedule into your daylight rhythm in 1 tap:\n${shareUrl}`
+    `📚 *${templatePayload.name}* Syllabus & Study Plan:\nTap to open directly on Cadence to test and explore:\n${shareUrl}`
   )}`;
 
   const telegramUrl = `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(
@@ -88,7 +142,7 @@ export const CourseTemplateModal: React.FC<CourseTemplateModalProps> = ({
       onClick={onClose}
     >
       <div 
-        className="bg-[#FAF8F5] rounded-3xl max-w-lg w-full p-4.5 sm:p-8 shadow-xl border border-stone-200/90 my-auto sm:my-8 max-h-[92vh] overflow-y-auto space-y-4 sm:space-y-6 text-stone-900 animate-in fade-in zoom-in-95 duration-150"
+        className="bg-[#FAF8F5] rounded-3xl max-w-lg w-full p-4.5 sm:p-8 shadow-xl border border-stone-200/90 my-auto sm:my-8 max-h-[92vh] overflow-y-auto space-y-4 sm:space-y-5 text-stone-900 animate-in fade-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -96,10 +150,13 @@ export const CourseTemplateModal: React.FC<CourseTemplateModalProps> = ({
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-xs font-serif text-stone-500">
               <BookOpen className="w-3.5 h-3.5 text-stone-600" />
-              <span>Scenario C+ Hyperedge Seeding</span>
+              <span>Whole Badge & Class Coordination</span>
+              <span className="text-[10px] font-sans font-bold uppercase px-1.5 py-0.2 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300">
+                100% Free
+              </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-serif font-normal tracking-tight text-stone-900">
-              Share as Course / Syllabus Template
+              Share Batch Workplan
             </h2>
           </div>
           <button
@@ -111,9 +168,14 @@ export const CourseTemplateModal: React.FC<CourseTemplateModalProps> = ({
           </button>
         </div>
 
+        {/* Informative Guidance */}
+        <p className="text-xs text-stone-600 leading-relaxed font-sans">
+          Share your complete course workplan or syllabus batch with your entire cohort or badge. When classmates open the link, they land directly on their own Cadence page to test, explore, and adopt the schedule with zero login.
+        </p>
+
         {/* Template Name Input */}
         <div className="space-y-1.5">
-          <label className="text-xs font-serif text-stone-600 block">
+          <label className="text-xs font-serif text-stone-700 font-medium block">
             Course or Syllabus Title:
           </label>
           <input
@@ -129,7 +191,7 @@ export const CourseTemplateModal: React.FC<CourseTemplateModalProps> = ({
         <div className="flex items-center gap-4 p-3.5 rounded-2xl bg-white/80 border border-stone-200/80 text-xs font-serif text-stone-700">
           <div className="flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-            <span><strong>{templatePayload.tasks.length}</strong> tasks</span>
+            <span><strong>{templatePayload.tasks.length}</strong> topics</span>
           </div>
           <span>•</span>
           <div className="flex items-center gap-1.5">
@@ -147,10 +209,10 @@ export const CourseTemplateModal: React.FC<CourseTemplateModalProps> = ({
           )}
         </div>
 
-        {/* Task Preview (Max 4 items shown) */}
+        {/* Task Preview (Max 5 items shown) */}
         <div className="space-y-2">
           <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
-            Included Assignments & Relative Deadlines
+            Included Work Items & Deadlines
           </div>
           <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
             {templatePayload.tasks.slice(0, 5).map((t, idx) => (
@@ -171,28 +233,107 @@ export const CourseTemplateModal: React.FC<CourseTemplateModalProps> = ({
             ))}
             {templatePayload.tasks.length > 5 && (
               <div className="text-[11px] text-stone-400 font-serif italic text-center pt-1">
-                + {templatePayload.tasks.length - 5} more tasks
+                + {templatePayload.tasks.length - 5} more topics
               </div>
             )}
           </div>
         </div>
 
-        {/* Generated Share Link Box */}
-        <div className="space-y-2">
-          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider flex items-center justify-between">
-            <span>Template Link (#template=)</span>
-            <span className="text-emerald-700 font-normal">1-tap instant load</span>
+        {/* 1-Tap Sharing Loops */}
+        <div className="space-y-2.5 pt-1">
+          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
+            1-Tap Instant Sharing Loops
           </div>
-          <div className="p-3 bg-stone-100/90 border border-stone-200/90 rounded-2xl break-all whitespace-normal overflow-hidden max-w-full font-mono text-xs text-stone-600 select-all leading-relaxed max-h-24 overflow-y-auto">
-            {shareUrl}
-          </div>
-        </div>
 
-        {/* Action Buttons */}
-        <div className="space-y-3 pt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {/* Phone native share */}
+            {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
+              <button
+                onClick={handleShareNative}
+                className="col-span-1 sm:col-span-3 flex items-center justify-center gap-2 px-4 py-2.5 bg-stone-900 text-white font-medium text-xs rounded-xl transition-all cursor-pointer active:scale-[0.98] min-h-[42px] shadow-xs"
+              >
+                <Share2 className="w-4 h-4 text-stone-200" />
+                <span>Share via Phone Apps (Class Chat, AirDrop, Messages)</span>
+              </button>
+            )}
+
+            {/* WhatsApp */}
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 text-[#128C7E] font-medium text-xs rounded-xl transition-all cursor-pointer active:scale-[0.98] min-h-[42px]"
+            >
+              <MessageSquare className="w-4 h-4 text-[#25D366] shrink-0" />
+              <span>WhatsApp</span>
+            </a>
+
+            {/* Telegram */}
+            <a
+              href={telegramUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#0088cc]/10 hover:bg-[#0088cc]/20 border border-[#0088cc]/30 text-[#0088cc] font-medium text-xs rounded-xl transition-all cursor-pointer active:scale-[0.98] min-h-[42px]"
+            >
+              <Send className="w-4 h-4 text-[#0088cc] shrink-0" />
+              <span>Telegram</span>
+            </a>
+
+            {/* Table / Class QR */}
+            <button
+              onClick={() => setShowQr(!showQr)}
+              className={`flex items-center justify-center gap-2 px-3 py-2.5 font-medium text-xs rounded-xl transition-all cursor-pointer active:scale-[0.98] min-h-[42px] ${
+                showQr
+                  ? 'bg-[#1F1E1D] text-[#FAF8F5] border border-[#1F1E1D] shadow-xs'
+                  : 'bg-stone-100 hover:bg-stone-200/80 border border-stone-200/90 text-stone-800'
+              }`}
+            >
+              <QrCode className="w-4 h-4 shrink-0" />
+              <span>📷 Class QR</span>
+            </button>
+          </div>
+
+          {/* Inline Table QR Code Display */}
+          {showQr && (
+            <div className="p-5 bg-white border border-stone-200/90 rounded-2xl shadow-xs text-center space-y-3 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between pb-1 border-b border-stone-100">
+                <div className="text-xs font-serif font-medium text-stone-800 flex items-center gap-1.5">
+                  <QrCode className="w-3.5 h-3.5 text-stone-600" />
+                  <span>class camera scan · load batch workplan</span>
+                </div>
+                <div className="flex items-center gap-1 text-[10px] font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                  <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                  <span>{liveHost}</span>
+                </div>
+              </div>
+
+              <div className="flex justify-center items-center py-1">
+                {qrLoading ? (
+                  <div className="w-48 h-48 flex items-center justify-center text-xs font-serif text-stone-400">
+                    rendering qr code...
+                  </div>
+                ) : qrSvg ? (
+                  <div
+                    className="w-48 h-48 max-w-full rounded-xl overflow-hidden p-2 bg-[#FAF8F5] border border-stone-200/80 flex items-center justify-center shadow-2xs [&>svg]:w-full [&>svg]:h-full"
+                    dangerouslySetInnerHTML={{ __html: qrSvg }}
+                  />
+                ) : null}
+              </div>
+
+              <div className="text-[11px] font-mono text-stone-600 bg-stone-50 px-2.5 py-1.5 rounded-xl border border-stone-200/70 truncate max-w-full text-center select-all">
+                {shareUrl}
+              </div>
+
+              <p className="text-[11px] font-serif text-stone-500 max-w-xs mx-auto leading-relaxed">
+                Classmates sitting in lecture or lab? Point camera at this screen to instantly load the workplan into their local Cadence app.
+              </p>
+            </div>
+          )}
+
+          {/* Copy Template Link Button */}
           <button
             onClick={handleCopyLink}
-            className={`w-full py-3 px-4 rounded-2xl text-xs sm:text-sm font-serif font-medium transition-all shadow-xs cursor-pointer flex items-center justify-center gap-2 min-h-[46px] active:scale-[0.98] ${
+            className={`w-full py-3 px-4 rounded-xl text-xs sm:text-sm font-serif font-medium transition-all shadow-xs cursor-pointer flex items-center justify-center gap-2 min-h-[44px] active:scale-[0.98] ${
               copied
                 ? 'bg-emerald-800 text-white'
                 : 'bg-stone-900 text-white hover:bg-stone-800'
@@ -201,48 +342,19 @@ export const CourseTemplateModal: React.FC<CourseTemplateModalProps> = ({
             {copied ? (
               <>
                 <Check className="w-4 h-4 text-emerald-300 stroke-[3]" />
-                <span>Copied Template Link to Clipboard!</span>
+                <span>Copied Workplan Link to Clipboard!</span>
               </>
             ) : (
               <>
                 <Copy className="w-4 h-4" />
-                <span>Copy Template Link</span>
+                <span>Copy Workplan Link (#template=)</span>
               </>
             )}
           </button>
-
-          {/* Quick Class Chat Share Options */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            <a
-              href={whatsappUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="py-2.5 px-3 rounded-xl bg-white hover:bg-stone-50 border border-stone-200 text-stone-800 text-xs font-serif flex items-center justify-center gap-1.5 transition-colors text-center"
-            >
-              <span>WhatsApp Chat</span>
-            </a>
-
-            <a
-              href={telegramUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="py-2.5 px-3 rounded-xl bg-white hover:bg-stone-50 border border-stone-200 text-stone-800 text-xs font-serif flex items-center justify-center gap-1.5 transition-colors text-center"
-            >
-              <span>Telegram</span>
-            </a>
-
-            <button
-              onClick={handleShareNative}
-              className="col-span-2 sm:col-span-1 py-2.5 px-3 rounded-xl bg-white hover:bg-stone-50 border border-stone-200 text-stone-800 text-xs font-serif flex items-center justify-center gap-1.5 transition-colors cursor-pointer text-center"
-            >
-              <Share2 className="w-3.5 h-3.5 text-stone-600" />
-              <span>Share...</span>
-            </button>
-          </div>
         </div>
 
         <p className="text-[11px] text-stone-500 font-serif leading-relaxed text-center">
-          💡 Anyone opening this link will have all assignments and relative deadlines auto-scheduled into their local daylight focus rhythm in 1 tap, zero login required.
+          💡 Anyone opening this link lands directly on their own Cadence page to test and explore the schedule. Zero signup or login required.
         </p>
       </div>
     </div>

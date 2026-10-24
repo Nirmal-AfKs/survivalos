@@ -20,12 +20,12 @@ import {
   Repeat,
   AlertTriangle,
   BookOpen,
-  Shield
+  Shield,
+  FileText
 } from 'lucide-react';
 import { ScheduledSlot, LifeEvent, WorkTask, ScheduleSettings, DayMode } from '../types';
-import { formatDateKey, addDays, parseDateKey } from '../utils/scheduler';
+import { formatDateKey, addDays, parseDateKey, getDayCapacityInfo } from '../utils/scheduler';
 import { formatChunkTitle, isEventOnDate, formatRecurringDaysShort, formatEventTimeSpan, formatBufferLabel } from '../utils/format';
-import { CognitiveTriageModal } from './CognitiveTriageModal';
 
 interface ScheduleViewProps {
   todayKey: string;
@@ -38,10 +38,9 @@ interface ScheduleViewProps {
   onToggleSlotComplete: (slotId: string) => void;
   onStartFocus: (slot: ScheduledSlot) => void;
   onToggleWhatToBring: (eventId: string, itemId: string) => void;
-  onRebalance: () => void;
-  onApplyTriage?: (updatedTasks: WorkTask[], rebalancedSlots: ScheduledSlot[], toastMessage: string) => void;
   onSetDateSpecificMode: (dateKey: string, mode: DayMode | null) => void;
   onOpenCourseTemplate?: () => void;
+  onOpenImportOutline?: () => void;
 }
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -57,13 +56,11 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
   onToggleSlotComplete,
   onStartFocus,
   onToggleWhatToBring,
-  onRebalance,
-  onApplyTriage,
   onSetDateSpecificMode,
   onOpenCourseTemplate,
+  onOpenImportOutline,
 }) => {
   const [selectedDateKey, setSelectedDateKey] = useState<string>(todayKey);
-  const [isTriageOpen, setIsTriageOpen] = useState(false);
   const [currentMonthDate, setCurrentMonthDate] = useState<Date>(() => {
     const [y, m, d] = todayKey.split('-').map(Number);
     return new Date(y, m - 1, 1);
@@ -253,23 +250,26 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
           {onOpenCourseTemplate && (
             <button
               onClick={onOpenCourseTemplate}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-serif text-stone-700 hover:text-stone-900 bg-white/80 border border-stone-200/80 rounded-xl hover:bg-stone-100 transition-colors shadow-2xs"
-              title="Share as Course / Syllabus Template"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-serif text-stone-700 hover:text-stone-900 bg-white/80 border border-stone-200/80 rounded-xl hover:bg-stone-100 transition-colors shadow-2xs cursor-pointer"
+              title="Share as Course / Syllabus Template for Whole Badge"
             >
               <BookOpen className="w-3.5 h-3.5 text-stone-600" />
-              <span className="hidden md:inline">Share Course Template</span>
-              <span className="md:hidden">Template</span>
+              <span className="hidden md:inline">Share Batch Workplan</span>
+              <span className="md:hidden">Workplan</span>
             </button>
           )}
 
-          <button
-            onClick={() => setIsTriageOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-serif text-stone-600 hover:text-stone-900 bg-white/80 border border-stone-200/80 rounded-xl hover:bg-stone-100 transition-colors shadow-2xs cursor-pointer"
-            title="Auto-rebalance all tasks across horizon"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">re-align.</span>
-          </button>
+          {onOpenImportOutline && (
+            <button
+              onClick={onOpenImportOutline}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-serif text-indigo-900 hover:text-indigo-950 bg-indigo-50/90 hover:bg-indigo-100/90 border border-indigo-200/90 rounded-xl transition-all shadow-2xs cursor-pointer"
+              title="Add All Work in One Go (Paste Syllabus / Outline) — 100% Free"
+            >
+              <FileText className="w-3.5 h-3.5 text-indigo-700" />
+              <span className="hidden md:inline">Import All Work (Free)</span>
+              <span className="md:hidden">Import All</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -385,6 +385,9 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
               const allDone = hasSlots && daySlots.every(s => s.isCompleted);
               const hasEvents = dayEvents.length > 0;
 
+              const cellCap = getDayCapacityInfo(cell.dateObj, tasks, events, settings, slots);
+              const isCellFull = cellCap.isFull && !cellCap.isRestDay && cellCap.totalSlots > 0;
+
               return (
                 <button
                   key={cell.dateKey}
@@ -439,6 +442,15 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                       }`}>
                         Off Day
                       </div>
+                    ) : isCellFull ? (
+                      <div className={`text-[10px] sm:text-[11px] truncate font-bold rounded-md px-1.5 py-0.5 flex items-center justify-between ${
+                        isSelected 
+                          ? 'bg-rose-500/40 text-rose-100 border border-rose-400/40' 
+                          : 'bg-rose-100 text-rose-900 border border-rose-300 font-semibold'
+                      }`}>
+                        <span>Slots Full</span>
+                        <span className="font-mono text-[9px] opacity-80">{daySlots.length}</span>
+                      </div>
                     ) : hasSlots ? (
                       <div className={`text-[10px] sm:text-[11px] truncate font-medium rounded-md px-1.5 py-0.5 ${
                         isSelected 
@@ -451,9 +463,9 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                       </div>
                     ) : (
                       <div className={`text-[10px] truncate px-1 hidden sm:block ${
-                        isSelected ? 'text-stone-400' : 'text-stone-400'
+                        isSelected ? 'text-stone-300' : 'text-emerald-700 font-medium'
                       }`}>
-                        Open slots
+                        {cellCap.availableSlots > 0 ? `${cellCap.availableSlots} open` : 'Open slots'}
                       </div>
                     )}
 
@@ -504,6 +516,8 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
               const hasWork = daySlots.length > 0;
               const allDone = hasWork && daySlots.every(s => s.isCompleted);
               const { mode: dayMode, isOverride } = getEffectiveDayMode(item.dateObj, item.key);
+              const itemCap = getDayCapacityInfo(item.dateObj, tasks, events, settings, slots);
+              const isItemFull = itemCap.isFull && !itemCap.isRestDay && itemCap.totalSlots > 0;
 
               return (
                 <button
@@ -534,6 +548,8 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                   <div className="flex items-center gap-1 mt-1.5 h-1.5">
                     {dayMode === 'free_rest' ? (
                       <span className="text-[9px] text-amber-700 font-bold">Rest</span>
+                    ) : isItemFull ? (
+                      <span className={`text-[9px] font-bold px-1 rounded ${isSelected ? 'bg-rose-400 text-stone-900' : 'bg-rose-100 text-rose-800'}`}>Full</span>
                     ) : hasWork ? (
                       <span 
                         className={`w-1.5 h-1.5 rounded-full ${
@@ -602,6 +618,24 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
                 <span className="font-semibold text-stone-800">{totalMin} min</span>
                 {completedMin > 0 && <span> ({completedMin}m completed)</span>}
               </div>
+              {selectedDayMode !== 'free_rest' && (() => {
+                const selectedDayCap = getDayCapacityInfo(selectedDateObj, tasks, events, settings, slots);
+                return (
+                  <div className="pt-1">
+                    {selectedDayCap.isFull && selectedDayCap.totalSlots > 0 ? (
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-rose-800 bg-rose-50 px-2.5 py-0.5 rounded-lg border border-rose-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse" />
+                        Slots Full ({selectedSlots.length}/{selectedDayCap.totalSlots} booked)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        {selectedDayCap.availableSlots} open slots available
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -851,47 +885,6 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
             </div>
           )}
 
-          {/* Unscheduled / Capacity Exceeded Holding Shelf with explicit warning badge */}
-          {(() => {
-            const unscheduledSlots = slots.filter(s => s.isUnscheduled);
-            if (unscheduledSlots.length === 0) return null;
-            return (
-              <div className="bg-amber-50/90 border border-amber-300/80 rounded-2xl p-4 sm:p-5 space-y-3 shadow-2xs mt-4">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-200/80 text-amber-900 border border-amber-300 text-[11px] font-serif font-semibold uppercase tracking-wider">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
-                      Unscheduled / Capacity Exceeded
-                    </span>
-                    <span className="text-xs font-serif text-amber-800 font-medium">
-                      {unscheduledSlots.length} chunk{unscheduledSlots.length > 1 ? 's' : ''} in holding
-                    </span>
-                  </div>
-                </div>
-                <p className="text-xs font-serif text-amber-900/90 leading-relaxed">
-                  Total estimated work exceeds your daylight rhythm windows before deadlines. These chunks are safely in holding so your immediate upcoming deadlines remain protected:
-                </p>
-                <div className="space-y-2 pt-1">
-                  {unscheduledSlots.map((us) => (
-                    <div key={us.id} className="flex items-center justify-between p-3 bg-white/95 border border-amber-200 rounded-xl text-xs font-serif shadow-2xs">
-                      <div className="space-y-0.5">
-                        <div className="font-medium text-stone-900">
-                          {formatChunkTitle(us.workTitle, us.chunkNumber, us.totalChunks)}
-                        </div>
-                        <div className="text-[11px] text-amber-700 font-sans">
-                          ⚠️ {us.unscheduledReason || 'Capacity exceeded before deadline window'} · {us.durationMinutes}m duration
-                        </div>
-                      </div>
-                      <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-[10px] font-mono font-semibold tracking-wide border border-amber-200">
-                        HOLDING
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })()}
-
           {/* Handover Button: Below the schedule */}
           {isSampleSchedule && onClearSample && (
             <div className="pt-2 text-center">
@@ -906,17 +899,6 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({
           )}
         </div>
       </div>
-
-      {/* Cognitive Triage & Deferral Modal */}
-      <CognitiveTriageModal
-        isOpen={isTriageOpen}
-        onClose={() => setIsTriageOpen(false)}
-        tasks={tasks}
-        events={events}
-        slots={slots}
-        settings={settings}
-        onApplyTriage={onApplyTriage || ((_t, _s) => onRebalance())}
-      />
     </div>
   );
 };

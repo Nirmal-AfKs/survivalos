@@ -2,21 +2,19 @@ import React, { useState, useMemo } from 'react';
 import { 
   X, 
   FileText, 
-  Lock, 
   Layers, 
   Clock, 
   Calendar, 
-  ExternalLink,
-  Check
+  Check,
+  Sparkles
 } from 'lucide-react';
 import { parseRawCourseOutline } from '../utils/outlineParser';
 import { WorkTask } from '../types';
-import { WHOP_LIFETIME_CHECKOUT_URL } from '../utils/addons';
 
 interface ImportOutlineModalProps {
   isOpen: boolean;
   onClose: () => void;
-  isImporterUnlocked: boolean;
+  isImporterUnlocked?: boolean;
   onOpenAddOns?: () => void;
   onImportTasks: (tasks: WorkTask[], toastMessage: string) => void;
   todayKey: string;
@@ -31,7 +29,7 @@ Machine Learning Paper Reading`;
 export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
   isOpen,
   onClose,
-  isImporterUnlocked,
+  isImporterUnlocked: _isImporterUnlocked,
   onOpenAddOns: _onOpenAddOns,
   onImportTasks,
   todayKey: _todayKey,
@@ -49,11 +47,6 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
   if (!isOpen) return null;
 
   const handleDistribute = () => {
-    if (!isImporterUnlocked) {
-      handleOpenLifetimeCheckout();
-      return;
-    }
-
     if (parsed.tasks.length === 0) return;
 
     // Create tasks with their natural parsed multi-day deadlineDates
@@ -79,14 +72,6 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
     onClose();
   };
 
-  const handleOpenLifetimeCheckout = () => {
-    try {
-      window.open(WHOP_LIFETIME_CHECKOUT_URL, '_blank', 'noopener,noreferrer');
-    } catch {
-      window.location.href = WHOP_LIFETIME_CHECKOUT_URL;
-    }
-  };
-
   return (
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-900/40 backdrop-blur-xs overflow-y-auto"
@@ -101,13 +86,13 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
           <div className="space-y-0.5">
             <div className="flex items-center gap-1.5 text-xs font-serif text-stone-500">
               <FileText className="w-3.5 h-3.5 text-stone-600" />
-              <span>1-Click Task & Course Outline Importer</span>
-              <span className="text-[10px] font-sans font-bold uppercase px-1.5 py-0.2 rounded-md bg-amber-200 text-amber-900 border border-amber-300">
-                pro
+              <span>1-Click Batch Task & Course Outline Importer</span>
+              <span className="text-[10px] font-sans font-bold uppercase px-1.5 py-0.2 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300">
+                100% free
               </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-serif font-normal tracking-tight text-stone-900">
-              Import Outline into Cadence
+              Add All Work in One Go
             </h2>
           </div>
           <button
@@ -208,52 +193,28 @@ export const ImportOutlineModal: React.FC<ImportOutlineModalProps> = ({
 
         {/* Footer Actions */}
         <div className="pt-3 border-t border-stone-200/80 space-y-2">
-          {isImporterUnlocked ? (
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2.5 text-xs font-serif text-stone-600 hover:text-stone-900 rounded-xl hover:bg-stone-200/60 transition-colors cursor-pointer min-h-[40px] flex items-center justify-center"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={parsed.tasks.length === 0}
-                onClick={handleDistribute}
-                className="inline-flex items-center justify-center gap-2 px-6 py-2.5 text-xs sm:text-sm font-serif font-medium rounded-xl bg-stone-900 hover:bg-stone-800 text-white transition-all shadow-sm active:scale-[0.98] cursor-pointer min-h-[42px] disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Check className="w-4 h-4 text-emerald-400" />
-                <span>Distribute Across Schedule</span>
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2.5 text-xs font-serif text-stone-600 hover:text-stone-900 rounded-xl hover:bg-stone-200/60 transition-colors cursor-pointer min-h-[40px] flex items-center justify-center order-2 sm:order-1"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleOpenLifetimeCheckout}
-                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-stone-900 hover:bg-stone-800 text-white font-serif text-xs sm:text-sm font-medium shadow-sm transition-all active:scale-[0.98] cursor-pointer flex-1 order-1 sm:order-2"
-                >
-                  <Lock className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Unlock Lifetime Importer — $15 (One-Time)</span>
-                  <ExternalLink className="w-3.5 h-3.5 opacity-80" />
-                </button>
-              </div>
-
-              {/* Subtle sub-caption below the button */}
-              <p className="text-center text-[11px] font-serif text-stone-500 italic pt-0.5">
-                Pay once. Unlimited syllabus parsing for your entire degree. Zero subscriptions.
-              </p>
-            </div>
-          )}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2.5 text-xs font-serif text-stone-600 hover:text-stone-900 rounded-xl hover:bg-stone-200/60 transition-colors cursor-pointer min-h-[40px] flex items-center justify-center order-2 sm:order-1"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={parsed.tasks.length === 0}
+              onClick={handleDistribute}
+              className="inline-flex items-center justify-center gap-2 px-6 py-2.5 text-xs sm:text-sm font-serif font-medium rounded-xl bg-stone-900 hover:bg-stone-800 text-white transition-all shadow-sm active:scale-[0.98] cursor-pointer min-h-[42px] disabled:opacity-50 disabled:cursor-not-allowed order-1 sm:order-2"
+            >
+              <Check className="w-4 h-4 text-emerald-400" />
+              <span>Distribute Across Schedule</span>
+            </button>
+          </div>
+          <p className="text-center text-[11px] font-serif text-stone-500 italic pt-0.5 flex items-center justify-center gap-1">
+            <Sparkles className="w-3 h-3 text-amber-500" />
+            <span>100% free and client-side. Automatically interleaves focus blocks without cramming.</span>
+          </p>
         </div>
       </div>
     </div>

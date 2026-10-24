@@ -179,10 +179,13 @@ export const SquadRadarModal: React.FC<SquadRadarModalProps> = ({
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-xs font-serif italic text-stone-500">
               <Users className="w-3.5 h-3.5 text-stone-600" />
-              <span>live sync & social harmony</span>
+              <span>Live Sync & Free Daylight Availability</span>
+              <span className="text-[10px] font-sans font-bold uppercase px-1.5 py-0.2 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 not-italic">
+                100% Free
+              </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-serif font-normal tracking-tight text-stone-900">
-              squad overlap radar.
+              Share Free Daylight Times
             </h2>
           </div>
           <button
@@ -196,12 +199,12 @@ export const SquadRadarModal: React.FC<SquadRadarModalProps> = ({
 
         {/* Informative Guidance */}
         <p className="text-xs text-stone-600 leading-relaxed font-sans">
-          Share your daily flow, focus windows, and open coffee slots with friends, co-workers, or study partners in one tap so they know when you are in flow and when you are free.
+          Share your open daylight focus blocks and break windows with friends or study partners. When they open the link, they land directly on their own Cadence page to compare free times and match daylight sprints.
         </p>
 
         {/* 🔒 Zero-Leak Privacy Banner */}
         <div className="bg-stone-100/80 border border-stone-200/90 rounded-2xl px-3.5 py-2.5 flex items-center gap-2 text-xs font-serif text-stone-800 shadow-2xs">
-          <span>🔒 Zero-Leak: Only your open daylight hours are shared. Your tasks and private notes remain strictly on your device.</span>
+          <span>🔒 Zero-Leak Privacy: Only your open daylight hours are shared. Your personal task titles, notes, and checklist items remain strictly on your device.</span>
         </div>
 
         {/* Share Text Preview Card */}

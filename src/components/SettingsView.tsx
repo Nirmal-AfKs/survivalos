@@ -635,11 +635,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           {savedFeedback ? (
             <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3.5 py-2.5 rounded-xl border border-emerald-200">
               <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>Schedule updated and entire horizon rebalanced!</span>
+              <span>Schedule updated according to your daylight rhythm!</span>
             </div>
           ) : (
             <span className="text-xs text-stone-400 font-serif">
-              Saving updates and immediately realigns your entire horizon.
+              Saving updates your available daily focus slots.
             </span>
           )}
 

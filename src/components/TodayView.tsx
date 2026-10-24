@@ -15,14 +15,14 @@ import {
   Zap,
   AlertTriangle,
   Shield,
-  Share2
+  Share2,
+  FileText
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ScheduledSlot, LifeEvent, WorkTask, ScheduleSettings, SquadSharePayload, SquadFocusBlock } from '../types';
-import { formatDateKey, addDays } from '../utils/scheduler';
+import { formatDateKey, addDays, calculateTodayCapacity } from '../utils/scheduler';
 import { formatChunkTitle, formatRecurringDaysShort, formatEventTimeSpan, formatBufferLabel } from '../utils/format';
 import { InboundSquadRadarCard } from './InboundSquadRadarCard';
-import { CognitiveTriageModal } from './CognitiveTriageModal';
 
 interface TodayViewProps {
   todayKey: string;
@@ -41,10 +41,9 @@ interface TodayViewProps {
   onOpenSquadRadar: () => void;
   onPeekTomorrow: () => void;
   onToggleWhatToBring: (eventId: string, itemId: string) => void;
-  onRebalance: () => void;
-  onApplyTriage?: (updatedTasks: WorkTask[], rebalancedSlots: ScheduledSlot[], toastMessage: string) => void;
   onMatchDaylight?: (friendBlock: SquadFocusBlock) => void;
   onDismissInboundSquad?: () => void;
+  onOpenImportOutline?: () => void;
 }
 
 export const TodayView: React.FC<TodayViewProps> = ({
@@ -64,16 +63,14 @@ export const TodayView: React.FC<TodayViewProps> = ({
   onOpenSquadRadar,
   onPeekTomorrow,
   onToggleWhatToBring,
-  onRebalance,
-  onApplyTriage,
   onMatchDaylight,
   onDismissInboundSquad,
+  onOpenImportOutline,
 }) => {
   const todayDateObj = new Date();
   const dayOfWeek = todayDateObj.getDay();
 
-  const [isRebalanceConfirmOpen, setIsRebalanceConfirmOpen] = useState(false);
-  const unscheduledSlots = slots.filter(s => s.isUnscheduled);
+  const todayCapacity = calculateTodayCapacity(settings, events, slots, todayDateObj);
 
   const todaySlots = slots.filter(s => s.date === todayKey);
   const todayEvents = events.filter(e => {
@@ -176,14 +173,17 @@ export const TodayView: React.FC<TodayViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <button
-            onClick={() => setIsRebalanceConfirmOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif text-stone-600 hover:text-stone-900 bg-white/80 border border-stone-200/80 rounded-xl hover:bg-stone-100 transition-colors shadow-2xs cursor-pointer"
-            title="Recalculate slots peacefully"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>re-align.</span>
-          </button>
+          {todayCapacity.totalDaylightSlots > 0 && todayCapacity.remainingOpenSlotsCount === 0 && !isRestDay ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif font-medium bg-rose-50 text-rose-900 border border-rose-200/90 rounded-xl shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
+              <span>slots full today.</span>
+            </span>
+          ) : todayCapacity.remainingOpenSlotsCount > 0 && !isRestDay ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif text-emerald-800 bg-emerald-50/80 border border-emerald-200/80 rounded-xl shadow-2xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span>{todayCapacity.remainingOpenSlotsCount} {todayCapacity.remainingOpenSlotsCount === 1 ? 'slot' : 'slots'} open today</span>
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -216,12 +216,22 @@ export const TodayView: React.FC<TodayViewProps> = ({
               <span>🌅 peek at tomorrow's cadence.</span>
             </button>
 
+            {onOpenImportOutline && (
+              <button
+                onClick={onOpenImportOutline}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 text-xs font-serif text-indigo-900 bg-indigo-50/90 hover:bg-indigo-100/90 border border-indigo-200/90 rounded-full transition-all shadow-2xs active:scale-[0.98] cursor-pointer min-h-[44px]"
+              >
+                <FileText className="w-3.5 h-3.5 text-indigo-700" />
+                <span>Import All Work in One Go (Free)</span>
+              </button>
+            )}
+
             <button
               onClick={onOpenSquadRadar}
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 text-xs font-serif text-stone-800 bg-white hover:bg-stone-100 border border-stone-200/90 rounded-full transition-all shadow-2xs cursor-pointer min-h-[44px]"
             >
               <Users className="w-3.5 h-3.5 text-stone-500" />
-              <span>👥 share availability with squad.</span>
+              <span>👥 share free times with squad.</span>
             </button>
           </div>
         </div>
@@ -256,11 +266,22 @@ export const TodayView: React.FC<TodayViewProps> = ({
                   type="button"
                   onClick={onOpenSquadRadar}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif text-stone-700 bg-white hover:bg-stone-50 border border-stone-200/90 rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
-                  title="Share availability or pair with phone"
+                  title="Share open daylight focus times with friends"
                 >
                   <Share2 className="w-3.5 h-3.5 text-stone-600" />
-                  <span>share / pair phone</span>
+                  <span>share free times</span>
                 </button>
+                {onOpenImportOutline && (
+                  <button
+                    type="button"
+                    onClick={onOpenImportOutline}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif text-indigo-900 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-200/80 rounded-xl transition-all cursor-pointer shadow-2xs active:scale-95"
+                    title="Add all work in one go from a syllabus or outline"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-indigo-700" />
+                    <span>import all work (free)</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -276,6 +297,33 @@ export const TodayView: React.FC<TodayViewProps> = ({
                 <span>{Math.max(0, totalMinutesToday - completedMinutesToday)}m remaining</span>
               </div>
             </div>
+
+            {/* Clear Slots Full / Open Daylight Capacity Banner */}
+            {todayCapacity.totalDaylightSlots > 0 && todayCapacity.remainingOpenSlotsCount === 0 && !isRestDay && (
+              <div className="flex items-center justify-between px-3.5 py-2 bg-rose-50 border border-rose-200/90 rounded-2xl text-xs font-serif text-rose-950">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse shrink-0" />
+                  <span className="font-semibold">Today's slots are completely full.</span>
+                  <span className="text-rose-800 font-sans text-[11px] hidden sm:inline">
+                    All {todayCapacity.totalDaylightSlots} daylight focus blocks are scheduled. Hard capacity ceiling reached.
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-md bg-rose-200/80 text-rose-900 border border-rose-300">
+                  Slots Full
+                </span>
+              </div>
+            )}
+            {todayCapacity.remainingOpenSlotsCount > 0 && !isRestDay && (
+              <div className="flex items-center justify-between px-3.5 py-1.5 bg-emerald-50/70 border border-emerald-200/70 rounded-2xl text-xs font-serif text-emerald-950">
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                  <span>{todayCapacity.remainingOpenSlotsCount} open focus {todayCapacity.remainingOpenSlotsCount === 1 ? 'block' : 'blocks'} left today ({todayCapacity.remainingMinutesAvailable}m daylight available)</span>
+                </div>
+                <span className="text-[10px] font-mono text-emerald-700 bg-white/80 px-2 py-0.5 rounded-md border border-emerald-200">
+                  Open daylight
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Main Focus Anchor: Next Up Focus Block */}
@@ -392,58 +440,6 @@ export const TodayView: React.FC<TodayViewProps> = ({
                 >
                   <span>🌅 peek at tomorrow's cadence.</span>
                 </button>
-              </div>
-            </div>
-          )}
-
-          {/* Accessible Re-Balance Schedule Action */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-stone-100/90 border border-stone-200/90 rounded-2xl shadow-2xs">
-            <div className="flex items-center gap-2.5 text-xs font-serif text-stone-600">
-              <RotateCcw className="w-4 h-4 text-stone-500 shrink-0" />
-              <span>Fell behind or schedule changed? Recalibrate with Earliest Deadline First protection.</span>
-            </div>
-            <button
-              onClick={() => setIsRebalanceConfirmOpen(true)}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-serif font-medium text-stone-800 bg-white hover:bg-stone-50 border border-stone-300 rounded-xl transition-all shadow-2xs hover:shadow-xs cursor-pointer min-h-[38px] shrink-0"
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-stone-600" />
-              <span>Fell behind? Re-balance schedule</span>
-            </button>
-          </div>
-
-          {/* Unscheduled / Capacity Exceeded Holding Shelf with explicit warning badge */}
-          {unscheduledSlots.length > 0 && (
-            <div className="bg-amber-50/90 border border-amber-300/80 rounded-2xl p-4 sm:p-5 space-y-3 shadow-2xs animate-in fade-in duration-200">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-200/80 text-amber-900 border border-amber-300 text-[11px] font-serif font-semibold uppercase tracking-wider">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
-                    Unscheduled / Capacity Exceeded
-                  </span>
-                  <span className="text-xs font-serif text-amber-800 font-medium">
-                    {unscheduledSlots.length} chunk{unscheduledSlots.length > 1 ? 's' : ''} held
-                  </span>
-                </div>
-              </div>
-              <p className="text-xs font-serif text-amber-900/90 leading-relaxed">
-                Total estimated work exceeds your daylight rhythm windows before deadlines. These chunks are safely in holding so your immediate upcoming deadlines remain protected:
-              </p>
-              <div className="space-y-2 pt-1">
-                {unscheduledSlots.map((us) => (
-                  <div key={us.id} className="flex items-center justify-between p-3 bg-white/95 border border-amber-200 rounded-xl text-xs font-serif shadow-2xs">
-                    <div className="space-y-0.5">
-                      <div className="font-medium text-stone-900">
-                        {formatChunkTitle(us.workTitle, us.chunkNumber, us.totalChunks)}
-                      </div>
-                      <div className="text-[11px] text-amber-700 font-sans">
-                        ⚠️ {us.unscheduledReason || 'Capacity exceeded before deadline window'} · {us.durationMinutes}m duration
-                      </div>
-                    </div>
-                    <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-[10px] font-mono font-semibold tracking-wide border border-amber-200">
-                      HOLDING
-                    </span>
-                  </div>
-                ))}
               </div>
             </div>
           )}
@@ -726,17 +722,6 @@ export const TodayView: React.FC<TodayViewProps> = ({
           </div>
         </div>
       )}
-
-      {/* Cognitive Triage & Deferral Re-alignment Modal */}
-      <CognitiveTriageModal
-        isOpen={isRebalanceConfirmOpen}
-        onClose={() => setIsRebalanceConfirmOpen(false)}
-        tasks={tasks}
-        events={events}
-        slots={slots}
-        settings={settings}
-        onApplyTriage={onApplyTriage || ((_t, _s) => onRebalance())}
-      />
     </div>
   );
 };

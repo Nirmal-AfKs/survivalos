@@ -533,11 +533,15 @@ export default function App() {
 
   // Import Outline / Course notes callback
   const handleImportOutlineTasks = (newTasks: WorkTask[], message: string) => {
-    const updatedTasks = [...newTasks, ...tasks];
+    const { userTasks, userEvents, userSlots } = vanishDefaults();
+    const updatedTasks = [...newTasks, ...userTasks];
     setTasks(updatedTasks);
     saveTasks(updatedTasks);
 
-    const rebalanced = recalculateSchedule(updatedTasks, events, settings, slots, new Date());
+    setEvents(userEvents);
+    saveEvents(userEvents);
+
+    const rebalanced = recalculateSchedule(updatedTasks, userEvents, settings, userSlots, new Date());
     setSlots(rebalanced);
     saveSlots(rebalanced);
 
@@ -571,28 +575,40 @@ export default function App() {
         {/* Subtle, Non-Intrusive PWA Install Banner */}
         <InstallPromptBanner />
 
-        {/* Course / Syllabus Template Loaded Banner */}
+        {/* Course / Syllabus Workplan Loaded for Whole Badge Banner */}
         {templateNotice && (
-          <div className="mb-4 bg-emerald-50 border border-emerald-300/80 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-serif text-emerald-950 shadow-2xs animate-in fade-in slide-in-from-top-2 duration-300">
-            <div className="flex items-center gap-3">
-              <span className="w-8 h-8 rounded-xl bg-emerald-800 text-white flex items-center justify-center shrink-0 text-base">
-                📚
+          <div className="mb-5 bg-emerald-50/95 border border-emerald-300 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-serif text-emerald-950 shadow-xs animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="flex items-start sm:items-center gap-3">
+              <span className="w-9 h-9 rounded-xl bg-emerald-800 text-white flex items-center justify-center shrink-0 text-base shadow-2xs">
+                🎓
               </span>
               <div>
-                <div className="font-semibold text-emerald-900 text-sm">
-                  Loaded Course Template: {templateNotice.name}
+                <div className="font-semibold text-emerald-950 text-sm flex items-center gap-2">
+                  <span>Testing Workplan: {templateNotice.name}</span>
+                  <span className="text-[10px] font-sans font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 border border-emerald-300">
+                    Live on your device
+                  </span>
                 </div>
-                <div className="text-emerald-700">
-                  {templateNotice.taskCount} assignments & relative deadlines automatically populated into your daylight rhythm!
+                <div className="text-emerald-800 text-xs mt-0.5">
+                  {templateNotice.taskCount} topics & deadlines loaded into your daylight schedule. Test sprints, drag chunks, or adapt the rhythm on your own Cadence workspace.
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+              <button
+                onClick={() => {
+                  setActiveTab('schedule');
+                  setTemplateNotice(null);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-white hover:bg-stone-50 text-emerald-900 border border-emerald-300 transition-colors font-medium cursor-pointer shadow-2xs"
+              >
+                View Calendar
+              </button>
               <button
                 onClick={() => setTemplateNotice(null)}
                 className="px-3.5 py-1.5 rounded-xl bg-emerald-800 text-white hover:bg-emerald-900 transition-colors font-medium cursor-pointer shadow-2xs"
               >
-                Got It
+                Got It, Start Testing
               </button>
             </div>
           </div>
@@ -623,6 +639,7 @@ export default function App() {
             onApplyTriage={handleApplyTriage}
             onMatchDaylight={handleMatchDaylight}
             onDismissInboundSquad={handleDismissInboundSquad}
+            onOpenImportOutline={() => setIsImportOutlineOpen(true)}
           />
         )}
 
@@ -645,6 +662,7 @@ export default function App() {
             onApplyTriage={handleApplyTriage}
             onSetDateSpecificMode={handleSetDateSpecificMode}
             onOpenCourseTemplate={() => setIsCourseTemplateOpen(true)}
+            onOpenImportOutline={() => setIsImportOutlineOpen(true)}
           />
         )}
 
@@ -658,6 +676,7 @@ export default function App() {
             onOpenAddWork={() => setIsAddOpen(true)}
             onOpenAddEvent={() => setIsAddOpen(true)}
             onOpenCourseTemplate={() => setIsCourseTemplateOpen(true)}
+            onOpenImportOutline={() => setIsImportOutlineOpen(true)}
             onDeleteTask={handleDeleteTask}
             onDeleteEvent={handleDeleteEvent}
             onToggleWhatToBring={handleToggleWhatToBring}
@@ -703,7 +722,13 @@ export default function App() {
           onAddEvent={handleAddEvent}
           events={events}
           settings={settings}
+          tasks={tasks}
+          slots={slots}
           isSampleSchedule={isSampleSchedule}
+          onOpenImportOutline={() => {
+            setIsAddOpen(false);
+            setIsImportOutlineOpen(true);
+          }}
         />
       )}
 

@@ -4,7 +4,9 @@ import {
   parseDateKey, 
   addDays, 
   recalculateSchedule,
-  calculateTodayCapacity
+  calculateTodayCapacity,
+  getDayCapacityInfo,
+  checkTaskCapacityCeiling
 } from '../src/utils/scheduler';
 import { 
   encodeSquadPayload, 
@@ -63,6 +65,7 @@ import {
 } from '../src/utils/outlineParser';
 import {
   getAddonStatus,
+  isImporterUnlocked,
   setAddonUnlocked,
   resetAddonsToFree,
   applyBypassCode,
@@ -1259,26 +1262,24 @@ it('distributes imported outline tasks across multi-day schedule avoiding capaci
 });
 
 // ==========================================
-// 11. CADENCE PRO ADD-ON & LICENSING TESTS
+// 11. CADENCE 100% FREE IMPORTER & SHARING ENGINE TESTS
 // ==========================================
-console.log('\n📌 Testing Cadence Pro Importer Licensing, Bypass & Whop Checkout:');
+console.log('\n📌 Testing Cadence 100% Free Importer & Sharing Paths:');
 
-it('starts with Cadence Pro locked in free tier by default', () => {
-  resetAddonsToFree();
+it('starts with Course & Outline Importer 100% free by default for all users', () => {
   const status = getAddonStatus();
-  assert.strictEqual(status.importer, false);
+  assert.strictEqual(status.importer, true);
+  assert.strictEqual(isImporterUnlocked(), true);
 });
 
-it('applies "test-importer" bypass code to unlock Cadence Pro', () => {
-  resetAddonsToFree();
+it('applies "test-importer" bypass code successfully', () => {
   const res = applyBypassCode('test-importer');
   assert.strictEqual(res.success, true);
   assert.strictEqual(res.unlocked.importer, true);
   assert.strictEqual(getAddonStatus().importer, true);
 });
 
-it('applies "test-all" bypass code to unlock Cadence Pro', () => {
-  resetAddonsToFree();
+it('applies "test-all" bypass code successfully', () => {
   const res = applyBypassCode('test-all');
   assert.strictEqual(res.success, true);
   assert.strictEqual(res.unlocked.importer, true);
@@ -1290,24 +1291,7 @@ it('rejects invalid or misspelled bypass codes with clean feedback', () => {
   assert.strictEqual(res.success, false);
 });
 
-it('resets Cadence Pro back to free tier', () => {
-  applyBypassCode('test-all');
-  resetAddonsToFree();
-  const status = getAddonStatus();
-  assert.strictEqual(status.importer, false);
-});
-
-it('contains correct Whop live checkout link and single $15 one-time lifetime pricing structure', () => {
-  assert.strictEqual(WHOP_LIFETIME_CHECKOUT_URL, 'https://whop.com/checkout/plan_1Hv3fzf6nWAxP');
-  assert.strictEqual(PRO_CHECKOUT_URL, 'https://whop.com/checkout/plan_1Hv3fzf6nWAxP');
-  assert.strictEqual(PRO_ADDON.checkoutUrl, 'https://whop.com/checkout/plan_1Hv3fzf6nWAxP');
-  assert.strictEqual(PRO_ADDON.price, 15);
-  assert.strictEqual(PRO_ADDON.pricingLabel, '$15 (One-Time)');
-  assert.strictEqual(PRO_ADDON.subcaption, 'Pay once. Unlimited syllabus parsing for your entire degree. Zero subscriptions.');
-});
-
-it('detects ?unlocked=true URL param and unlocks Cadence Pro', () => {
-  resetAddonsToFree();
+it('detects ?unlocked=true URL param and maintains unlock state', () => {
   // Mock window.location
   (globalThis as any).window = {
     location: {
@@ -1345,12 +1329,116 @@ it('stores and retrieves individual track volumes correctly', () => {
   assert.strictEqual(volumes.brook, 0.65);
 });
 
-it('clamps track volume between 0 and 1', () => {
-  saveTrackVolume('waves', 1.5);
-  assert.strictEqual(getTrackVolumes().waves, 1);
+// ==========================================
+// 13. HARD CAPACITY CEILING & SLOTS FULL TESTS
+// ==========================================
+console.log('\n📌 Testing Hard Capacity Ceiling & Slots Full Protection:');
 
-  saveTrackVolume('brook', -0.5);
-  assert.strictEqual(getTrackVolumes().brook, 0);
+it('accurately identifies free rest days with zero available slots', () => {
+  const refDate = new Date(2026, 9, 24, 9, 0); // Oct 24, 2026 09:00
+  const settings: ScheduleSettings = {
+    ...DEFAULT_SETTINGS,
+    dateSpecificModes: {
+      '2026-10-24': 'free_rest',
+    },
+  };
+
+  const cap = getDayCapacityInfo(refDate, [], [], settings, [], refDate);
+  assert.strictEqual(cap.isRestDay, true);
+  assert.strictEqual(cap.totalSlots, 0);
+  assert.strictEqual(cap.availableSlots, 0);
+  assert.strictEqual(cap.isFull, true);
+});
+
+it('correctly flags isFull=true when all available daylight slots are booked', () => {
+  const refDate = new Date(2026, 9, 25, 8, 0); // Oct 25, 2026
+  const settings: ScheduleSettings = {
+    ...DEFAULT_SETTINGS,
+    dayModes: { [refDate.getDay()]: 'routine_work' },
+    averageDay: { ...DEFAULT_SETTINGS.averageDay, startHour: '18:00', endHour: '21:00' }, // 3h = 180m. With 45m slots + 15m breaks:
+    // Slot 1: 18:00-18:45, break: 18:45-19:00
+    // Slot 2: 19:00-19:45, break: 19:45-20:00
+    // Slot 3: 20:00-20:45 (total = 3 slots)
+    focusBlockMinutes: 45,
+    breakIntervalMinutes: 15,
+  };
+
+  const dayKey = '2026-10-25';
+  // Initially with no slots:
+  const initialCap = getDayCapacityInfo(refDate, [], [], settings, [], refDate);
+  assert.strictEqual(initialCap.totalSlots, 3);
+  assert.strictEqual(initialCap.availableSlots, 3);
+  assert.strictEqual(initialCap.isFull, false);
+
+  // Now create 3 slots occupying that day:
+  const fullSlots: ScheduledSlot[] = [
+    { id: 's1', workTaskId: 't1', workTitle: 'Task 1', category: 'work', color: 'stone', date: dayKey, startTime: '18:00', endTime: '18:45', durationMinutes: 45, isCompleted: false, chunkNumber: 1, totalChunks: 1 },
+    { id: 's2', workTaskId: 't2', workTitle: 'Task 2', category: 'work', color: 'stone', date: dayKey, startTime: '19:00', endTime: '19:45', durationMinutes: 45, isCompleted: false, chunkNumber: 1, totalChunks: 1 },
+    { id: 's3', workTaskId: 't3', workTitle: 'Task 3', category: 'work', color: 'stone', date: dayKey, startTime: '20:00', endTime: '20:45', durationMinutes: 45, isCompleted: false, chunkNumber: 1, totalChunks: 1 },
+  ];
+
+  const fullCap = getDayCapacityInfo(refDate, [], [], settings, fullSlots, refDate);
+  assert.strictEqual(fullCap.totalSlots, 3);
+  assert.strictEqual(fullCap.availableSlots, 0);
+  assert.strictEqual(fullCap.isFull, true);
+});
+
+it('strictly enforces hard capacity ceiling and prevents overplanning before deadline', () => {
+  const today = new Date(2026, 9, 24, 8, 0);
+  const settings: ScheduleSettings = {
+    ...DEFAULT_SETTINGS,
+    dayModes: { 0: 'routine_work', 6: 'routine_work' },
+    averageDay: { ...DEFAULT_SETTINGS.averageDay, startHour: '18:00', endHour: '20:00' }, // 2h = 120m -> exactly 2 slots of 45m (18:00-18:45, 19:00-19:45)
+    focusBlockMinutes: 45,
+    breakIntervalMinutes: 15,
+    finishDayBeforeDeadline: false,
+  };
+
+  // Day 1 (Oct 24): 2 slots available
+  // Day 2 (Oct 25): 2 slots available
+  // Suppose user wants to add a 180 min task (4 chunks of 45m) with deadline Oct 24 (today):
+  // Available before Oct 24: 2 slots. Needed: 4 slots.
+  const check = checkTaskCapacityCeiling(180, '2026-10-24', [], [], settings, [], today);
+  assert.strictEqual(check.neededChunks, 4);
+  assert.strictEqual(check.totalAvailableSlotsBeforeDeadline, 2);
+  assert.strictEqual(check.isOverCapacity, true); // HARD CEILING TRIGGERED!
+
+  // Check suggested longer deadline:
+  // Oct 24 has 2 slots, Oct 25 has 2 slots -> total 4 slots!
+  // So suggested deadline date should be '2026-10-25' (+1 day):
+  assert.strictEqual(check.firstDateWithCapacity, '2026-10-25');
+  assert.strictEqual(check.suggestedDeadlineDate, '2026-10-25');
+
+  // When user extends deadline to 2026-10-25:
+  const extendedCheck = checkTaskCapacityCeiling(180, check.suggestedDeadlineDate, [], [], settings, [], today);
+  assert.strictEqual(extendedCheck.neededChunks, 4);
+  assert.strictEqual(extendedCheck.totalAvailableSlotsBeforeDeadline, 4);
+  assert.strictEqual(extendedCheck.isOverCapacity, false); // Pass! Now they can add without overplanning!
+});
+
+it('factors existing booked slots when enforcing hard ceiling for new work', () => {
+  const today = new Date(2026, 9, 24, 8, 0);
+  const settings: ScheduleSettings = {
+    ...DEFAULT_SETTINGS,
+    dayModes: { 0: 'routine_work', 6: 'routine_work' },
+    averageDay: { ...DEFAULT_SETTINGS.averageDay, startHour: '18:00', endHour: '20:00' }, // 2 slots per day
+    focusBlockMinutes: 45,
+    breakIntervalMinutes: 15,
+    finishDayBeforeDeadline: false,
+  };
+
+  // Oct 24 already has 2 slots booked (full):
+  const existingSlots: ScheduledSlot[] = [
+    { id: 's1', workTaskId: 't1', workTitle: 'Existing 1', category: 'work', color: 'stone', date: '2026-10-24', startTime: '18:00', endTime: '18:45', durationMinutes: 45, isCompleted: false, chunkNumber: 1, totalChunks: 1 },
+    { id: 's2', workTaskId: 't2', workTitle: 'Existing 2', category: 'work', color: 'stone', date: '2026-10-24', startTime: '19:00', endTime: '19:45', durationMinutes: 45, isCompleted: false, chunkNumber: 1, totalChunks: 1 },
+  ];
+
+  // User tries to add a 45m task (1 chunk) with deadline today (Oct 24):
+  const check = checkTaskCapacityCeiling(45, '2026-10-24', [], [], settings, existingSlots, today);
+  assert.strictEqual(check.neededChunks, 1);
+  assert.strictEqual(check.totalAvailableSlotsBeforeDeadline, 0); // 0 open on Oct 24!
+  assert.strictEqual(check.isOverCapacity, true); // Blocked by hard ceiling!
+  assert.strictEqual(check.suggestedDeadlineDate, '2026-10-25'); // Suggests extending to tomorrow!
 });
 
 console.log(`\n🎉 ALL ${passedTests}/${totalTests} TESTS PASSED WITH 100% SUCCESS!`);

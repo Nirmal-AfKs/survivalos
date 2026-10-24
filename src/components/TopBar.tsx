@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Users, Sparkles, BookOpen, FileText } from 'lucide-react';
+import { Plus, Users, BookOpen, FileText, Share2 } from 'lucide-react';
 
 interface TopBarProps {
   activeTab: 'today' | 'schedule' | 'tasks' | 'settings';
@@ -7,7 +7,7 @@ interface TopBarProps {
   onOpenAdd: () => void;
   onOpenSquadRadar: () => void;
   onOpenCourseTemplate?: () => void;
-  onOpenAddOns: () => void;
+  onOpenAddOns?: () => void;
   onOpenImportOutline: () => void;
 }
 
@@ -17,12 +17,11 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenAdd,
   onOpenSquadRadar,
   onOpenCourseTemplate,
-  onOpenAddOns,
   onOpenImportOutline,
 }) => {
   return (
     <header className="sticky top-0 z-30 w-full bg-[#FAF8F5]/90 backdrop-blur-md border-b border-stone-200/80 transition-colors">
-      <div className="max-w-6xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-6">
+      <div className="max-w-6xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-4">
         {/* Zone 1: Brand wordmark in warm lowercase serif */}
         <div className="flex items-center gap-2.5 shrink-0">
           <button 
@@ -35,7 +34,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           </button>
         </div>
 
-        {/* Zone 2: 5 concise single-line text nav links */}
+        {/* Zone 2: Concise single-line text nav links */}
         <nav className="hidden md:flex items-center gap-6 text-xs font-serif text-stone-600">
           <button
             onClick={() => setActiveTab('today')}
@@ -72,62 +71,45 @@ export const TopBar: React.FC<TopBarProps> = ({
           >
             life rhythm.
           </button>
-
-          {/* Cadence Pro Link */}
-          <button
-            onClick={onOpenAddOns}
-            className="whitespace-nowrap transition-colors py-1 cursor-pointer hover:text-stone-900 text-stone-600 inline-flex items-center gap-1 group"
-            title="Cadence Pro: 1-Click Course & Outline Importer"
-          >
-            <span>pro.</span>
-            <Sparkles className="w-2.5 h-2.5 text-amber-500 opacity-80 group-hover:opacity-100" />
-          </button>
         </nav>
 
-        {/* Zone 3: Actions + Import Outline (Pro) + Add */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-          {/* Mobile Pro quick icon */}
-          <button
-            onClick={onOpenAddOns}
-            className="md:hidden inline-flex items-center gap-1 px-2 py-2 text-xs font-serif text-stone-700 bg-white/80 hover:bg-stone-200/60 border border-stone-200/90 rounded-xl transition-all cursor-pointer min-h-[40px] shadow-2xs"
-            title="Cadence Pro: 1-Click Course & Outline Importer"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-            <span className="hidden xs:inline">pro.</span>
-          </button>
-
-          {onOpenCourseTemplate && (
-            <button
-              onClick={onOpenCourseTemplate}
-              className="hidden lg:inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs font-serif text-stone-700 bg-white/80 hover:bg-stone-200/60 border border-stone-200/90 rounded-xl transition-all cursor-pointer min-h-[40px] shadow-2xs"
-              title="Share as Course / Syllabus Template"
-            >
-              <BookOpen className="w-3.5 h-3.5 text-stone-600 shrink-0" />
-              <span>course template.</span>
-            </button>
-          )}
-
+        {/* Zone 3: Actions — Both Sharing Ways + Import All Work in One Go + Add */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Way 1: Share Free Daylight Times (Squad Radar) */}
           <button
             onClick={onOpenSquadRadar}
             className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs font-serif text-stone-700 bg-white/80 hover:bg-stone-200/60 border border-stone-200/90 rounded-xl transition-all cursor-pointer min-h-[40px] shadow-2xs"
-            title="Squad Radar — Share daylight focus windows with friends"
+            title="Share Free Daylight Times (Squad Radar) — Share free focus hours without leaking task details"
+            aria-label="Share Free Daylight Times"
           >
             <Users className="w-3.5 h-3.5 text-stone-600 shrink-0" />
-            <span className="hidden sm:inline">squad radar.</span>
-            <span className="hidden xs:inline sm:hidden">squad.</span>
+            <span className="hidden sm:inline">free times.</span>
           </button>
 
-          {/* Import Outline Button with subtle 'Pro' badge next to + add */}
+          {/* Way 2: Share Batch Workplan for Whole Badge / Cohort */}
+          {onOpenCourseTemplate && (
+            <button
+              onClick={onOpenCourseTemplate}
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs font-serif text-stone-700 bg-white/80 hover:bg-stone-200/60 border border-stone-200/90 rounded-xl transition-all cursor-pointer min-h-[40px] shadow-2xs"
+              title="Share Workplan for Whole Badge / Cohort — Classmates open directly in their own Cadence to test"
+              aria-label="Share Batch Workplan"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-stone-600 shrink-0" />
+              <span className="hidden sm:inline">share workplan.</span>
+            </button>
+          )}
+
+          {/* Prominent Free 1-Click Course & Outline Importer */}
           <button
             onClick={onOpenImportOutline}
-            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs font-serif text-stone-800 bg-white hover:bg-stone-100 border border-stone-300 rounded-xl transition-all cursor-pointer min-h-[40px] shadow-2xs group"
-            title="Fast Course Notes & Syllabus Regex Importer"
+            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs font-serif text-indigo-950 bg-indigo-50/90 hover:bg-indigo-100/90 border border-indigo-200/80 rounded-xl transition-all cursor-pointer min-h-[40px] shadow-2xs group"
+            title="Add All Work in One Go (Paste Syllabus / Outline) — 100% Free"
+            aria-label="Import All Work (100% Free)"
           >
-            <FileText className="w-3.5 h-3.5 text-stone-600 shrink-0" />
-            <span className="hidden sm:inline">import outline.</span>
-            <span className="hidden xs:inline sm:hidden">outline.</span>
-            <span className="text-[9px] font-sans font-bold uppercase px-1.5 py-0.2 rounded bg-amber-200 text-amber-900 border border-amber-300 leading-none">
-              pro
+            <FileText className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
+            <span className="hidden sm:inline font-medium">import all work.</span>
+            <span className="text-[9px] font-sans font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 leading-none">
+              free
             </span>
           </button>
 

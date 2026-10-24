@@ -1,19 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { 
   X, 
   Sparkles, 
   Check, 
   FileText, 
-  ExternalLink,
-  Clock,
-  Heart,
-  Lock
+  Clock, 
+  Heart, 
+  Users, 
+  BookOpen,
+  ShieldCheck
 } from 'lucide-react';
-import { 
-  getAddonStatus, 
-  AddonStatus, 
-  WHOP_LIFETIME_CHECKOUT_URL 
-} from '../utils/addons';
+import { AddonStatus } from '../utils/addons';
 
 interface AddOnsModalProps {
   isOpen: boolean;
@@ -25,38 +22,7 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const [status, setStatus] = useState<AddonStatus>(() => getAddonStatus());
-
-  useEffect(() => {
-    if (isOpen) {
-      setStatus(getAddonStatus());
-    }
-  }, [isOpen]);
-
-  // Keep synced if status changes in background
-  useEffect(() => {
-    const handleStatusUpdate = () => {
-      setStatus(getAddonStatus());
-    };
-    window.addEventListener('cadence_addons_changed', handleStatusUpdate);
-    window.addEventListener('storage', handleStatusUpdate);
-    return () => {
-      window.removeEventListener('cadence_addons_changed', handleStatusUpdate);
-      window.removeEventListener('storage', handleStatusUpdate);
-    };
-  }, []);
-
   if (!isOpen) return null;
-
-  const isUnlocked = status.importer;
-
-  const openCheckout = () => {
-    try {
-      window.open(WHOP_LIFETIME_CHECKOUT_URL, '_blank', 'noopener,noreferrer');
-    } catch {
-      window.location.href = WHOP_LIFETIME_CHECKOUT_URL;
-    }
-  };
 
   return (
     <div 
@@ -71,11 +37,14 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
         <div className="flex items-start justify-between pb-3 border-b border-stone-200/80">
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-xs font-serif text-stone-500">
-              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-              <span>Cadence Sanctuary Pro</span>
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Cadence Sanctuary</span>
+              <span className="text-[10px] font-sans font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
+                100% Free & Open
+              </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-serif font-normal tracking-tight text-stone-900">
-              Unlock Cadence Pro
+              All Features Free For Everyone
             </h2>
           </div>
           <button
@@ -87,104 +56,84 @@ export const AddOnsModal: React.FC<AddOnsModalProps> = ({
           </button>
         </div>
 
-        {/* Pro Status Banner if Already Unlocked */}
-        {isUnlocked ? (
-          <div className="p-5 rounded-2xl bg-emerald-50/90 border border-emerald-200 space-y-2 text-emerald-950">
-            <div className="flex items-center justify-between">
-              <span className="font-serif font-semibold text-base flex items-center gap-2 text-emerald-900">
-                <Check className="w-5 h-5 text-emerald-600 stroke-[2.5]" />
-                <span>Cadence Pro is Active</span>
-              </span>
-              <span className="text-[10px] font-sans font-bold uppercase tracking-wider bg-emerald-200 text-emerald-900 px-2.5 py-0.5 rounded-full border border-emerald-300">
-                Unlocked
-              </span>
-            </div>
-            <p className="text-xs font-serif text-emerald-800 leading-relaxed">
-              1-Click Task & Course Outline Importer and multi-day intelligent scheduling distribution are permanently unlocked on your device.
-            </p>
+        {/* Status Callout */}
+        <div className="p-4 rounded-2xl bg-emerald-50/90 border border-emerald-200 space-y-1.5 text-emerald-950">
+          <div className="flex items-center gap-2 font-serif font-semibold text-sm text-emerald-900">
+            <Check className="w-4 h-4 text-emerald-600 stroke-[2.5]" />
+            <span>Zero Paywalls · Zero Subscriptions · Zero Data Tracking</span>
           </div>
-        ) : (
-          /* Single $15 One-Time Lifetime Pricing */
-          <div className="space-y-4">
-            <p className="text-xs sm:text-sm font-serif text-stone-600 leading-relaxed">
-              Instantly turn course notes, syllabi, and raw outlines into balanced focus chunks distributed across your daylight schedule.
-            </p>
+          <p className="text-xs font-serif text-emerald-800 leading-relaxed">
+            Cadence is a serene, calm desk sanctuary for students and focused creators. Every tool is 100% free, private, and runs entirely in your local browser.
+          </p>
+        </div>
 
-            {/* Feature Highlights Grid */}
-            <div className="p-3.5 rounded-2xl bg-white border border-stone-200/90 shadow-2xs space-y-2.5 text-xs font-serif text-stone-700">
-              <div className="flex items-start gap-2.5">
-                <FileText className="w-3.5 h-3.5 text-stone-900 shrink-0 mt-0.5" />
-                <span>
-                  <strong>Natural Deadline Regex Importer:</strong> Parses lines like <code className="bg-stone-100 px-1 py-0.5 rounded text-stone-900 font-mono text-[11px]">Calculus - 90m @ tomorrow</code> or <code className="bg-stone-100 px-1 py-0.5 rounded text-stone-900 font-mono text-[11px]">Lab 2h @ Friday</code>.
-                </span>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <Clock className="w-3.5 h-3.5 text-stone-900 shrink-0 mt-0.5" />
-                <span>
-                  <strong>Multi-Day Interleaved Pacing:</strong> Automatically distributes focus blocks across the week leading to each deadline with zero cramming.
-                </span>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <Heart className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span>
-                  <strong>Nature Soundscapes Always Free:</strong> Ocean Waves, Rainfall, and Brook soundscapes remain 100% free for all users.
-                </span>
-              </div>
-            </div>
+        {/* Feature Highlights Grid */}
+        <div className="space-y-2.5">
+          <div className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">
+            Included Core Capabilities
+          </div>
 
-            {/* Single Lifetime $15 Highlighted Card */}
-            <div className="relative p-5 rounded-2xl bg-white border-2 border-stone-900 shadow-md space-y-3.5 text-stone-900">
-              {/* Highlight Badge */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-amber-500 fill-amber-500" />
-                  <h3 className="text-base font-serif font-bold text-stone-900">
-                    Lifetime Sanctuary Pass
-                  </h3>
-                </div>
-                <span className="text-[10px] font-sans font-bold uppercase tracking-wider bg-amber-200 text-amber-950 px-2 py-0.5 rounded-full border border-amber-300 shadow-2xs">
-                  One-Time Payment
-                </span>
-              </div>
-
-              {/* Price Line */}
-              <div className="space-y-0.5">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-3xl font-serif font-bold text-stone-900">$15</span>
-                  <span className="text-xs font-serif text-stone-500">one-time payment</span>
-                </div>
-                <p className="text-[11px] font-serif text-stone-500 leading-relaxed">
-                  Pay once. Unlimited syllabus parsing for your entire degree. Zero subscriptions.
+          <div className="p-3.5 rounded-2xl bg-white border border-stone-200/90 shadow-2xs space-y-3 text-xs font-serif text-stone-700">
+            <div className="flex items-start gap-2.5">
+              <FileText className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-stone-900">1-Click Course & Outline Importer:</strong>
+                <p className="text-stone-600 mt-0.5">
+                  Paste raw syllabi or task notes. Parses natural syntax and deadlines (e.g. <code className="text-indigo-800 font-mono">Calculus - 90m @ tomorrow</code>) and interleaves focus chunks across your week without cramming.
                 </p>
               </div>
+            </div>
 
-              {/* Primary Direct Whop Checkout Button */}
-              <button
-                type="button"
-                onClick={openCheckout}
-                className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-serif font-semibold bg-stone-900 hover:bg-stone-800 text-white rounded-xl shadow-xs transition-all active:scale-[0.98] cursor-pointer min-h-[46px]"
-              >
-                <Lock className="w-4 h-4 text-amber-300" />
-                <span>Unlock Lifetime Importer — $15 (One-Time)</span>
-                <ExternalLink className="w-4 h-4 ml-0.5 opacity-80" />
-              </button>
+            <div className="flex items-start gap-2.5">
+              <Users className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-stone-900">Share Free Daylight Times (Squad Radar):</strong>
+                <p className="text-stone-600 mt-0.5">
+                  Share open daylight hours and breaks with friends or study partners. Zero-leak privacy: your task titles and notes are never shared.
+                </p>
+              </div>
+            </div>
 
-              {/* Subtle sub-caption below button */}
-              <p className="text-center text-[11px] font-serif text-stone-500 italic">
-                Pay once. Unlimited syllabus parsing for your entire degree. Zero subscriptions.
-              </p>
+            <div className="flex items-start gap-2.5">
+              <BookOpen className="w-4 h-4 text-stone-800 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-stone-900">Share Batch Workplan (For Whole Badge / Cohort):</strong>
+                <p className="text-stone-600 mt-0.5">
+                  Share your full syllabus plan. Classmates open it directly on their own Cadence page to test and explore the schedule.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2.5">
+              <Heart className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-stone-900">Nature Soundscapes:</strong>
+                <p className="text-stone-600 mt-0.5">
+                  Serene Ocean Waves, Rainfall, and Mountain Brook audio soundscapes built-in for deep desk focus.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-stone-700 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-stone-900">100% Client-Side Privacy:</strong>
+                <p className="text-stone-600 mt-0.5">
+                  All tasks, events, and schedules are stored solely on your local device. No logins or accounts required.
+                </p>
+              </div>
             </div>
           </div>
-        )}
+        </div>
 
         {/* Footer Actions */}
         <div className="pt-3 border-t border-stone-200/80 flex items-center justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="w-full sm:w-auto px-6 py-2.5 text-xs font-serif bg-stone-200/70 hover:bg-stone-300/70 text-stone-800 rounded-xl transition-colors cursor-pointer min-h-[38px] font-medium"
+            className="w-full sm:w-auto px-6 py-2.5 text-xs font-serif bg-stone-900 hover:bg-stone-800 text-white rounded-xl transition-all cursor-pointer min-h-[40px] font-medium shadow-xs"
           >
-            Close
+            Enjoy Cadence Sanctuary
           </button>
         </div>
       </div>

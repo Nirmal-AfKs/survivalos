@@ -257,6 +257,7 @@ export function parseSquadPayloadString(rawStr: string): SquadSharePayload | nul
 }
 
 export function parseSquadFromUrl(): SquadSharePayload | null {
+  if (typeof window === 'undefined') return null;
   try {
     let rawEncoded = '';
 

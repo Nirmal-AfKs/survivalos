@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { X, Clock, Calendar, Link as LinkIcon, Sparkles, Package, MapPin, Plus, Repeat, Shield } from 'lucide-react';
-import { LifeEvent, ScheduleSettings, WorkTask, WhatToBringItem } from '../types';
-import { formatDateKey, addDays, RECURRING_WEEK_DAYS, formatRecurringDaysShort } from '../utils/scheduler';
+import React, { useState, useMemo } from 'react';
+import { X, Clock, Calendar, Link as LinkIcon, Sparkles, Package, MapPin, Plus, Repeat, Shield, FileText, AlertTriangle, Check } from 'lucide-react';
+import { LifeEvent, ScheduleSettings, WorkTask, WhatToBringItem, ScheduledSlot } from '../types';
+import { formatDateKey, parseDateKey, addDays, RECURRING_WEEK_DAYS, formatRecurringDaysShort, checkTaskCapacityCeiling } from '../utils/scheduler';
 import { calculateEndTime, calculateDurationFromTimes } from '../utils/format';
 
 interface UnifiedAddModalProps {
@@ -11,8 +11,11 @@ interface UnifiedAddModalProps {
   onAddEvent: (event: Omit<LifeEvent, 'id'>) => void;
   events: LifeEvent[];
   settings: ScheduleSettings;
+  tasks?: WorkTask[];
+  slots?: ScheduledSlot[];
   initialMode?: 'work' | 'event';
   isSampleSchedule?: boolean;
+  onOpenImportOutline?: () => void;
 }
 
 const DURATION_PRESETS = [
@@ -70,8 +73,11 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
   onAddEvent,
   events,
   settings,
+  tasks = [],
+  slots = [],
   initialMode = 'work',
   isSampleSchedule = false,
+  onOpenImportOutline,
 }) => {
   const [mode, setMode] = useState<'work' | 'event'>(initialMode);
 
@@ -130,6 +136,18 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
 
   const calculatedChunks = Math.ceil(estimatedMinutes / settings.focusBlockMinutes);
 
+  const capacityCheck = useMemo(() => {
+    return checkTaskCapacityCeiling(
+      estimatedMinutes,
+      deadlineDate,
+      tasks,
+      events,
+      settings,
+      slots,
+      new Date()
+    );
+  }, [estimatedMinutes, deadlineDate, tasks, events, settings, slots]);
+
   const handleAddBringItem = (itemText: string) => {
     const trimmed = itemText.trim();
     if (!trimmed || whatToBringList.includes(trimmed)) return;
@@ -144,6 +162,11 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
   const handleWorkSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!workTitle.trim()) return;
+
+    // Strict Hard Ceiling Enforcement: Cannot overplan beyond available daylight focus slots
+    if (capacityCheck.isOverCapacity) {
+      return;
+    }
 
     onAddWork({
       title: workTitle.trim(),
@@ -256,6 +279,37 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
         {/* WORK FORM */}
         {mode === 'work' ? (
           <form onSubmit={handleWorkSubmit} className="space-y-4">
+            {onOpenImportOutline && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenImportOutline();
+                }}
+                className="w-full p-3 bg-indigo-50/90 hover:bg-indigo-100/90 border border-indigo-200/90 rounded-2xl flex items-center justify-between text-left transition-all cursor-pointer group shadow-2xs"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-serif font-semibold text-indigo-950 flex items-center gap-1.5">
+                      <span>Add All Work in One Go (Paste Syllabus / Outline)</span>
+                      <span className="text-[10px] font-sans font-bold uppercase px-1.5 py-0.2 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-md">
+                        100% Free
+                      </span>
+                    </div>
+                    <p className="text-[11px] font-serif text-indigo-800/80">
+                      Paste full course notes or raw bullets — auto-spreads across your week
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs font-serif font-semibold text-indigo-700 group-hover:translate-x-0.5 transition-transform shrink-0 hidden sm:inline">
+                  Open →
+                </span>
+              </button>
+            )}
+
             <div>
               <label className="block text-xs font-serif text-stone-700 mb-1">
                 what needs to be crafted?
@@ -367,29 +421,150 @@ export const UnifiedAddModal: React.FC<UnifiedAddModalProps> = ({
               </div>
             )}
 
-            {/* Sanctuary Promise */}
-            <div className="bg-white/80 rounded-2xl p-3 border border-stone-200/70 text-xs text-stone-600 space-y-1">
-              <div className="font-serif italic text-stone-900">
-                locked cadence guarantee:
+            {/* HARD CAPACITY CEILING & SLOTS FULL STATUS */}
+            {capacityCheck.isOverCapacity ? (
+              <div className="bg-rose-50/95 border border-rose-200/90 rounded-2xl p-3.5 space-y-3 text-rose-950 shadow-2xs">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-7 h-7 rounded-xl bg-rose-100 text-rose-800 flex items-center justify-center shrink-0 mt-0.5">
+                    <AlertTriangle className="w-4 h-4 text-rose-700" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-serif font-bold text-sm text-rose-950">
+                        Slots Are Full — Hard Capacity Ceiling
+                      </span>
+                      <span className="text-[10px] font-mono uppercase bg-rose-200/80 text-rose-900 px-1.5 py-0.5 rounded font-bold">
+                        Hard Ceiling
+                      </span>
+                    </div>
+                    <p className="text-xs text-rose-800 leading-relaxed font-sans">
+                      This task requires <strong>{capacityCheck.neededChunks} focus slots</strong> ({estimatedMinutes} min), but only <strong>{capacityCheck.totalAvailableSlotsBeforeDeadline} open slot{capacityCheck.totalAvailableSlotsBeforeDeadline === 1 ? '' : 's'}</strong> remain before your deadline ({deadlineDate}). Overplanning is strictly prevented so you never take on more work than daylight allows.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Day-by-Day Slot Availability Strip */}
+                {capacityCheck.daysBreakdown.length > 0 && (
+                  <div className="space-y-1 pt-1.5 border-t border-rose-200/70">
+                    <div className="text-[11px] font-serif font-medium text-rose-900 flex items-center justify-between">
+                      <span>Daily slot breakdown until deadline:</span>
+                      <span className="font-mono text-[10px] text-rose-700">
+                        {capacityCheck.totalAvailableSlotsBeforeDeadline} open slots total
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {capacityCheck.daysBreakdown.map((day) => {
+                        const isToday = day.dateKey === formatDateKey(new Date());
+                        const label = isToday ? 'Today' : day.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                        return (
+                          <span
+                            key={day.dateKey}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-mono border ${
+                              day.isRestDay
+                                ? 'bg-amber-100/70 text-amber-900 border-amber-200'
+                                : day.availableSlots === 0
+                                ? 'bg-rose-200/90 text-rose-950 border-rose-300 font-bold'
+                                : 'bg-white text-stone-800 border-stone-200'
+                            }`}
+                          >
+                            <span>{label}:</span>
+                            <span>
+                              {day.isRestDay ? 'Rest' : day.availableSlots === 0 ? 'Full (0 open)' : `${day.availableSlots} open`}
+                            </span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 1-Click Action to Make Deadline Longer */}
+                <div className="space-y-1.5 pt-1.5 border-t border-rose-200/70">
+                  <div className="text-[11px] font-serif font-medium text-rose-950">
+                    Make the deadline longer so this work fits comfortably:
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {capacityCheck.suggestedDeadlineDate && (
+                      <button
+                        type="button"
+                        onClick={() => setDeadlineDate(capacityCheck.suggestedDeadlineDate)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-900 hover:bg-rose-800 text-white text-xs font-serif font-medium transition-all shadow-xs cursor-pointer active:scale-95"
+                      >
+                        <Calendar className="w-3.5 h-3.5 text-rose-300" />
+                        <span>Extend to {capacityCheck.suggestedDeadlineDate} (fits all chunks)</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const current = parseDateKey(deadlineDate);
+                        setDeadlineDate(formatDateKey(addDays(current, 1)));
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-rose-100 text-rose-900 border border-rose-300 text-xs font-serif transition-colors cursor-pointer"
+                    >
+                      +1 Day
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const current = parseDateKey(deadlineDate);
+                        setDeadlineDate(formatDateKey(addDays(current, 2)));
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-rose-100 text-rose-900 border border-rose-300 text-xs font-serif transition-colors cursor-pointer"
+                    >
+                      +2 Days
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const current = parseDateKey(deadlineDate);
+                        setDeadlineDate(formatDateKey(addDays(current, 7)));
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-rose-100 text-rose-900 border border-rose-300 text-xs font-serif transition-colors cursor-pointer"
+                    >
+                      +1 Week
+                    </button>
+                  </div>
+                </div>
               </div>
-              <p>
-                Spreads across ~{calculatedChunks} blocks of {settings.focusBlockMinutes}m. Concludes smoothly before {deadlineDate} so your deadline eve remains calm.
-              </p>
-            </div>
+            ) : (
+              <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-3 text-xs text-emerald-950 space-y-1">
+                <div className="font-serif font-medium flex items-center gap-1.5 text-emerald-900">
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Sufficient Capacity Guaranteed (Hard Ceiling Respected)</span>
+                </div>
+                <p className="text-emerald-800 font-sans text-[11px] leading-relaxed">
+                  {capacityCheck.neededChunks} focus block{capacityCheck.neededChunks === 1 ? '' : 's'} ({estimatedMinutes}m) will interleave peacefully. {capacityCheck.totalAvailableSlotsBeforeDeadline} open slots available before {deadlineDate}.
+                </p>
+              </div>
+            )}
 
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-xs text-stone-500 hover:text-stone-900 transition-colors"
+                className="px-4 py-2 text-xs text-stone-500 hover:text-stone-900 transition-colors cursor-pointer"
               >
                 cancel
               </button>
               <button
                 type="submit"
-                className="px-5 py-2.5 text-xs font-serif bg-stone-900 hover:bg-stone-800 text-white rounded-xl transition-all shadow-xs cursor-pointer"
+                disabled={capacityCheck.isOverCapacity || !workTitle.trim()}
+                className={`px-5 py-2.5 text-xs font-serif rounded-xl transition-all shadow-xs flex items-center gap-1.5 ${
+                  capacityCheck.isOverCapacity
+                    ? 'bg-rose-100 text-rose-700 border border-rose-300 cursor-not-allowed opacity-90'
+                    : 'bg-stone-900 hover:bg-stone-800 text-white cursor-pointer active:scale-95'
+                }`}
+                title={capacityCheck.isOverCapacity ? 'Daily slots are full before this deadline. Extend deadline to add.' : 'Add task to cadence'}
               >
-                add to cadence.
+                {capacityCheck.isOverCapacity ? (
+                  <>
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-700" />
+                    <span>Slots Full (Extend Deadline)</span>
+                  </>
+                ) : (
+                  <span>add to cadence.</span>
+                )}
               </button>
             </div>
           </form>
